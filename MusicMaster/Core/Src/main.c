@@ -124,11 +124,6 @@ int LED = 0, counter = 0;
 
 struct digit digits[10];
 
-enum BuzzerFlag {
-	CorrectInput, WrongInput, CorrectPass, WrongPass, SuperWrongPass, NONE
-};
-enum BuzzerFlag buzzer_flag = NONE;
-
 enum ProgramState{Paused, Resume, IDLE};
 enum ProgramState programState = IDLE;
 uint32_t buzzerCoolDown = 0;
@@ -183,7 +178,6 @@ void extractNumber(const uint8_t *data) {
 				HAL_UART_Transmit_IT(&huart1, "ERROR(INCORRECT FORMAT)\n", 24);
 			}
 			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, 0);
-			buzzer_flag = WrongInput;
 			buzzerEnterTime = HAL_GetTick();
 			if (alertStatus)
 				PWM_Start();
@@ -192,7 +186,6 @@ void extractNumber(const uint8_t *data) {
 	}
 	if (logStatus) {
 		HAL_UART_Transmit_IT(&huart1, pass, 19);
-		buzzer_flag = CorrectInput;
 		buzzerEnterTime = HAL_GetTick();
 		if (alertStatus)
 			PWM_Start();
@@ -246,7 +239,6 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 					alertStatus = 1;
 					HAL_UART_Transmit_IT(&huart1, "Program Alerts Turned ON\n",
 							25);
-					buzzer_flag = CorrectInput;
 					buzzerEnterTime = HAL_GetTick();
 					PWM_Start();
 				}
@@ -268,7 +260,6 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 				}
 			} else {
 				HAL_UART_Transmit_IT(&huart1, "INVALID INPUT\n", 14);
-				buzzer_flag = WrongInput;
 				buzzerEnterTime = HAL_GetTick();
 				if (alertStatus)
 					PWM_Start();
@@ -282,29 +273,27 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 //UART END
 
 //ADC Begin
-enum ADC_FUNCTION{CHANGE_MSUIC,CHANGE_VOLUME, NONE};
+enum ADC_FUNCTION{CHANGE_MUSIC,CHANGE_VOLUME, NONE};
 enum ADC_FUNCTION adc_function = NONE;
 
-uint32_t normalize_adc(uint32_t adc_value, uint32_t max_adc_value, uint32_t playlist_size) {
-	switch(adc_function){
-	case CHANGE_MSUIC:
-			// Calculate the step size
-			float step = (float)max_adc_value / (playlist_size - 1);
-			// Calculate the normalized music number
-			uint32_t normalized_number = (uint32_t)((float)adc_value / step + 0.5); // Adding 0.5 for rounding
-			// Ensure the normalized number is at least 1
-			if (normalized_number < 1) {
-				normalized_number = 1;
-			}
-			return normalized_number;
-		break;
-	case CHANGE_VOLUME:
-		if(value > max_adc_value - 150)
-				value = 4095;
-		adc_value = (adc_value * 100) / max_adc_value;
-		return adc_value;
-		break;
-	}
+uint32_t normalize_adc(uint32_t adc_value, uint32_t max_adc_value, uint32_t playlist_size, int adc_function) {
+    if (adc_function == CHANGE_MUSIC) {
+        // Calculate the step size
+        float step = (float)max_adc_value / (playlist_size - 1);
+        // Calculate the normalized music number
+        uint32_t normalized_number = (uint32_t)((float)adc_value / step + 0.5); // Adding 0.5 for rounding
+        // Ensure the normalized number is at least 1
+        if (normalized_number < 1) {
+            normalized_number = 1;
+        }
+        return normalized_number;
+    }
+    else if (adc_function == CHANGE_VOLUME) {
+        if (adc_value > max_adc_value - 150)
+            adc_value = 4095;
+        adc_value = (adc_value * 100) / max_adc_value;
+        return adc_value;
+    }
 }
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
@@ -970,10 +959,6 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 								HAL_UART_Transmit_IT(&huart1, logFailed, 18);
 							prevEnterTime = HAL_GetTick();
 							wrongPassCounter++;
-							if (wrongPassCounter % 3 == 0)
-								buzzer_flag = SuperWrongPass;
-							else
-								buzzer_flag = WrongPass;
 							buzzerEnterTime = HAL_GetTick();
 							if (alertStatus)
 								PWM_Start();
@@ -989,7 +974,6 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 						if (logStatus)
 							HAL_UART_Transmit_IT(&huart1, logCorrect, 19);
 						prevEnterTime = HAL_GetTick();
-						buzzer_flag = CorrectPass;
 						buzzerEnterTime = HAL_GetTick();
 						if (alertStatus)
 							PWM_Start();
@@ -1006,7 +990,6 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 		isCorrect = -1;
 		prevEnterTime = HAL_GetTick();
 //		PWM_Stop();
-		buzzer_flag = NONE;
 	}
 }
 
@@ -1029,94 +1012,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 		} else {
 			++index;
 		}
-
-//		if (isCorrect == 1 && blink == 1) {
-//			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, 1);
-//			if (HAL_GetTick() - prevEnterTime > 5000) {
-//				blink = 0;
-//				HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, 0);
-//				prevEnterTime = HAL_GetTick();
-//				isCorrect = -1;
-//			}
-//		}
-//
-//		if (isCorrect == 0 && blink == 1) {
-//			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, 0);
-//			if (HAL_GetTick() - prevEnterTime < 5000) {
-//				if (HAL_GetTick() - prevTime > 100) {
-//					HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_2);
-//					prevTime = HAL_GetTick();
-//				}
-//			} else {
-//				if (buzzer_flag != SuperWrongPass) {
-//					blink = 0;
-//					isCorrect = -1;
-//					prevEnterTime = HAL_GetTick();
-//				}
-//			}
-//		}
-
-//		switch (buzzer_flag) {
-//		case CorrectInput:
-//			if (buzzer_flag == CorrectInput) {
-//				if (HAL_GetTick() - buzzerEnterTime < 50) {
-//					PWM_Change_Tone(507, _volume);
-//				} else {
-//					PWM_Stop();
-//					buzzer_flag = NONE;
-//				}
-//			}
-//			break;
-//		case WrongInput:
-//			if (HAL_GetTick() - buzzerEnterTime < 1000) {
-//				if (HAL_GetTick() - buzzerCoolDown < 50) {
-//					PWM_Change_Tone(236, _volume);
-//				} else if (HAL_GetTick() - buzzerCoolDown < 300) {
-//					//coolDown
-//					PWM_Change_Tone(0, 0);
-//				} else
-//					buzzerCoolDown = HAL_GetTick();
-//			} else {
-//				PWM_Stop();
-//				buzzer_flag = NONE;
-//			}
-//			break;
-//		case CorrectPass:
-//			if (HAL_GetTick() - buzzerEnterTime < 1200) {
-//				if (HAL_GetTick() - buzzerEnterTime < 800) {
-//					if (HAL_GetTick() - buzzerCoolDown < 50) {
-//						PWM_Change_Tone(1000, _volume);
-//					} else if (HAL_GetTick() - buzzerCoolDown < 100) {
-//						//coolDown
-//						PWM_Change_Tone(0, _volume);
-//					} else
-//						buzzerCoolDown = HAL_GetTick();
-//				} else {
-//					PWM_Change_Tone(1000, _volume);
-//				}
-//			} else {
-//				PWM_Stop();
-//				buzzer_flag = NONE;
-//			}
-//			break;
-//		case WrongPass:
-//			if (HAL_GetTick() - buzzerEnterTime < 1500) {
-//				if (HAL_GetTick() - buzzerCoolDown < 150) {
-//					PWM_Change_Tone(700, _volume);
-//				} else if (HAL_GetTick() - buzzerCoolDown < 450) {
-//					//coolDown
-//					PWM_Change_Tone(0, _volume);
-//				} else
-//					buzzerCoolDown = HAL_GetTick();
-//			} else {
-//				PWM_Stop();
-//				buzzer_flag = NONE;
-//			}
-//			break;
-//		case SuperWrongPass:
-//			PWM_Change_Tone(1000, _volume);
-//			break;
-//		}
 	}
 }
 
