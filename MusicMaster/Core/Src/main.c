@@ -19,8 +19,6 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "dictionary.h"
-#include "stm32f3xx_it.h"
-
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -48,6 +46,8 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+ADC_HandleTypeDef hadc1;
+
 I2C_HandleTypeDef hi2c1;
 
 SPI_HandleTypeDef hspi1;
@@ -70,8 +70,9 @@ static void MX_I2C1_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_USB_PCD_Init(void);
 static void MX_TIM1_Init(void);
-static void MX_USART1_UART_Init(void);
 static void MX_TIM2_Init(void);
+static void MX_USART1_UART_Init(void);
+static void MX_ADC1_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -129,7 +130,7 @@ enum BuzzerFlag {
 enum BuzzerFlag buzzer_flag = NONE;
 
 enum ProgramState{Paused, Resume, IDLE};
-enum ProgramState programState = IDLE;
+enum ProgramState programState = Resume;
 uint32_t buzzerCoolDown = 0;
 //PWM BEGIN
 //TIM_HandleTypeDef *pwm_timer = &htim2;
@@ -278,8 +279,22 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 
 	}
 }
-
 //UART END
+
+//ADC Begin
+
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
+{
+	if(hadc->Instance == ADC1)
+	{
+		uint32_t value;
+		value = HAL_ADC_GetValue(hadc);
+		char str[100];
+		sprintf(str, "%lu\n",value);
+		HAL_UART_Transmit_IT(&huart1, str, strlen(str));
+	}
+}
+//ADC End
 
 void display_number(int led_flag, int _number) {
 	HAL_GPIO_WritePin(GPIOD,
@@ -310,7 +325,7 @@ void initTonesDictionary() {
     struct Tone super_mario_bros[]={{2637,306},{0,153},{2637,153},{0,153},{2093,153},{2637,153},{0,153},{3136,153},{0,459},{1586,153},{0,459},{2093,153},{0,306},{1586,153},{0,306},{1319,153},{0,306},{1760,153},{0,153},{1976,153},{0,153},{1865,153},{1760,153},{0,153},{1586,204},{2637,204},{3136,204},{3520,153},{0,153},{2794,153},{3136,153},{0,153},{2637,153},{0,153},{2093,153},{2349,153},{1976,153},{0,306},{2093,153},{0,306},{1586,153},{0,306},{1319,153},{0,306},{1760,153},{0,153},{1976,153},{0,153},{1865,153},{1760,153},{0,153},{1586,204},{2637,204},{3136,204},{3520,153},{0,153},{2794,153},{3136,153},{0,153},{2637,153},{0,153},{2093,153},{2349,153},{1976,153},{0,0}};
     struct Tone hedwig_theme[]={{REST,750},{NOTE_D4,374},{NOTE_G4,561},{NOTE_AS4,187},{NOTE_A4,374},{NOTE_G4,750},{NOTE_D5,374},{NOTE_C5,1124},{NOTE_A4,1124},{NOTE_G4,561},{NOTE_AS4,187},{NOTE_A4,374},{NOTE_F4,750},{NOTE_GS4,374},{NOTE_D4,2249},{NOTE_D4,374},{NOTE_G4,561},{NOTE_AS4,187},{NOTE_A4,374},{NOTE_G4,750},{NOTE_D5,374},{NOTE_F5,750},{NOTE_E5,374},{NOTE_DS5,750},{NOTE_B4,374},{NOTE_DS5,561},{NOTE_D5,187},{NOTE_CS5,374},{NOTE_CS4,750},{NOTE_B4,374},{NOTE_G4,2249},{NOTE_AS4,374},{NOTE_D5,750},{NOTE_AS4,374},{NOTE_D5,750},{NOTE_AS4,374},{NOTE_DS5,750},{NOTE_D5,374},{NOTE_CS5,750},{NOTE_A4,374},{NOTE_AS4,561},{NOTE_D5,187},{NOTE_CS5,374},{NOTE_CS4,750},{NOTE_D4,374},{NOTE_D5,1700},{REST,150},{NOTE_AS4,374},{NOTE_D5,750},{NOTE_AS4,374},{NOTE_D5,750},{NOTE_AS4,374},{NOTE_F5,750},{NOTE_E5,374},{NOTE_DS5,750},{NOTE_B4,374},{NOTE_DS5,561},{NOTE_D5,187},{NOTE_CS5,374},{NOTE_CS4,750},{NOTE_AS4,374},{NOTE_G4,2249},{0,0}};
     struct Tone doom[]={{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_B2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,534},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_B2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,534},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_B2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,534},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_B2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_FS3,67},{NOTE_D3,67},{NOTE_B2,67},{NOTE_A3,67},{NOTE_FS3,67},{NOTE_B2,67},{NOTE_D3,67},{NOTE_FS3,67},{NOTE_A3,67},{NOTE_FS3,67},{NOTE_D3,67},{NOTE_B2,67},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_B2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,534},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_B2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_B3,67},{NOTE_G3,67},{NOTE_E3,67},{NOTE_G3,67},{NOTE_B3,67},{NOTE_E4,67},{NOTE_G3,67},{NOTE_B3,67},{NOTE_E4,67},{NOTE_B3,67},{NOTE_G4,67},{NOTE_B4,67},{NOTE_A2,133},{NOTE_A2,133},{NOTE_A3,133},{NOTE_A2,133},{NOTE_A2,133},{NOTE_G3,133},{NOTE_A2,133},{NOTE_A2,133},{NOTE_F3,133},{NOTE_A2,133},{NOTE_A2,133},{NOTE_DS3,133},{NOTE_A2,133},{NOTE_A2,133},{NOTE_E3,133},{NOTE_F3,133},{NOTE_A2,133},{NOTE_A2,133},{NOTE_A3,133},{NOTE_A2,133},{NOTE_A2,133},{NOTE_G3,133},{NOTE_A2,133},{NOTE_A2,133},{NOTE_F3,133},{NOTE_A2,133},{NOTE_A2,133},{NOTE_DS3,534},{NOTE_A2,133},{NOTE_A2,133},{NOTE_A3,133},{NOTE_A2,133},{NOTE_A2,133},{NOTE_G3,133},{NOTE_A2,133},{NOTE_A2,133},{NOTE_F3,133},{NOTE_A2,133},{NOTE_A2,133},{NOTE_DS3,133},{NOTE_A2,133},{NOTE_A2,133},{NOTE_E3,133},{NOTE_F3,133},{NOTE_A2,133},{NOTE_A2,133},{NOTE_A3,133},{NOTE_A2,133},{NOTE_A2,133},{NOTE_G3,133},{NOTE_A2,133},{NOTE_A2,133},{NOTE_A3,67},{NOTE_F3,67},{NOTE_D3,67},{NOTE_A3,67},{NOTE_F3,67},{NOTE_D3,67},{NOTE_C4,67},{NOTE_A3,67},{NOTE_F3,67},{NOTE_A3,67},{NOTE_F3,67},{NOTE_D3,67},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_B2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,534},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_B2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,534},{NOTE_CS3,133},{NOTE_CS3,133},{NOTE_CS4,133},{NOTE_CS3,133},{NOTE_CS3,133},{NOTE_B3,133},{NOTE_CS3,133},{NOTE_CS3,133},{NOTE_A3,133},{NOTE_CS3,133},{NOTE_CS3,133},{NOTE_G3,133},{NOTE_CS3,133},{NOTE_CS3,133},{NOTE_GS3,133},{NOTE_A3,133},{NOTE_B2,133},{NOTE_B2,133},{NOTE_B3,133},{NOTE_B2,133},{NOTE_B2,133},{NOTE_A3,133},{NOTE_B2,133},{NOTE_B2,133},{NOTE_G3,133},{NOTE_B2,133},{NOTE_B2,133},{NOTE_F3,534},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_B2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_B3,67},{NOTE_G3,67},{NOTE_E3,67},{NOTE_G3,67},{NOTE_B3,67},{NOTE_E4,67},{NOTE_G3,67},{NOTE_B3,67},{NOTE_E4,67},{NOTE_B3,67},{NOTE_G4,67},{NOTE_B4,67},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_B2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,534},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_B2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{0,0}};
-    struct Tone fur_elise[] = {{NOTE_E5,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_B4,16},{NOTE_D5,16},{NOTE_C5,16},{NOTE_A4,-8},{NOTE_C4,16},{NOTE_E4,16},{NOTE_A4,16},{NOTE_B4,-8},{NOTE_E4,16},{NOTE_GS4,16},{NOTE_B4,16},{NOTE_C5,8},{REST,16},{NOTE_E4,16},{NOTE_E5,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_B4,16},{NOTE_D5,16},{NOTE_C5,16},{NOTE_A4,-8},{NOTE_C4,16},{NOTE_E4,16},{NOTE_A4,16},{NOTE_B4,-8},{NOTE_E4,16},{NOTE_C5,16},{NOTE_B4,16},{NOTE_A4,4},{REST,8},{NOTE_E5,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_B4,16},{NOTE_D5,16},{NOTE_C5,16},{NOTE_A4,-8},{NOTE_C4,16},{NOTE_E4,16},{NOTE_A4,16},{NOTE_B4,-8},{NOTE_E4,16},{NOTE_GS4,16},{NOTE_B4,16},{NOTE_C5,8},{REST,16},{NOTE_E4,16},{NOTE_E5,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_B4,16},{NOTE_D5,16},{NOTE_C5,16},{NOTE_A4,-8},{NOTE_C4,16},{NOTE_E4,16},{NOTE_A4,16},{NOTE_B4,-8},{NOTE_E4,16},{NOTE_C5,16},{NOTE_B4,16},{NOTE_A4,8},{REST,16},{NOTE_B4,16},{NOTE_C5,16},{NOTE_D5,16},{NOTE_E5,-8},{NOTE_G4,16},{NOTE_F5,16},{NOTE_E5,16},{NOTE_D5,-8},{NOTE_F4,16},{NOTE_E5,16},{NOTE_D5,16},{NOTE_C5,-8},{NOTE_E4,16},{NOTE_D5,16},{NOTE_C5,16},{NOTE_B4,8},{REST,16},{NOTE_E4,16},{NOTE_E5,16},{REST,16},{REST,16},{NOTE_E5,16},{NOTE_E6,16},{REST,16},{REST,16},{NOTE_DS5,16},{NOTE_E5,16},{REST,16},{REST,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_B4,16},{NOTE_D5,16},{NOTE_C5,16},{NOTE_A4,8},{REST,16},{NOTE_C4,16},{NOTE_E4,16},{NOTE_A4,16},{NOTE_B4,8},{REST,16},{NOTE_E4,16},{NOTE_GS4,16},{NOTE_B4,16},{NOTE_C5,8},{REST,16},{NOTE_E4,16},{NOTE_E5,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_B4,16},{NOTE_D5,16},{NOTE_C5,16},{NOTE_A4,8},{REST,16},{NOTE_C4,16},{NOTE_E4,16},{NOTE_A4,16},{NOTE_B4,8},{REST,16},{NOTE_E4,16},{NOTE_C5,16},{NOTE_B4,16},{NOTE_A4,8},{REST,16},{NOTE_B4,16},{NOTE_C5,16},{NOTE_D5,16},{NOTE_E5,-8},{NOTE_G4,16},{NOTE_F5,16},{NOTE_E5,16},{NOTE_D5,-8},{NOTE_F4,16},{NOTE_E5,16},{NOTE_D5,16},{NOTE_C5,-8},{NOTE_E4,16},{NOTE_D5,16},{NOTE_C5,16},{NOTE_B4,8},{REST,16},{NOTE_E4,16},{NOTE_E5,16},{REST,16},{REST,16},{NOTE_E5,16},{NOTE_E6,16},{REST,16},{REST,16},{NOTE_DS5,16},{NOTE_E5,16},{REST,16},{REST,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_B4,16},{NOTE_D5,16},{NOTE_C5,16},{NOTE_A4,8},{REST,16},{NOTE_C4,16},{NOTE_E4,16},{NOTE_A4,16},{NOTE_B4,8},{REST,16},{NOTE_E4,16},{NOTE_GS4,16},{NOTE_B4,16},{NOTE_C5,8},{REST,16},{NOTE_E4,16},{NOTE_E5,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_B4,16},{NOTE_D5,16},{NOTE_C5,16},{NOTE_A4,8},{REST,16},{NOTE_C4,16},{NOTE_E4,16},{NOTE_A4,16},{NOTE_B4,8},{REST,16},{NOTE_E4,16},{NOTE_C5,16},{NOTE_B4,16},{NOTE_A4,8},{REST,16},{NOTE_C5,16},{NOTE_C5,16},{NOTE_C5,16},{NOTE_C5,4},{NOTE_F5,-16},{NOTE_E5,32},{NOTE_E5,8},{NOTE_D5,8},{NOTE_AS5,-16},{NOTE_A5,32},{NOTE_A5,16},{NOTE_G5,16},{NOTE_F5,16},{NOTE_E5,16},{NOTE_D5,16},{NOTE_C5,16},{NOTE_AS4,8},{NOTE_A4,8},{NOTE_A4,32},{NOTE_G4,32},{NOTE_A4,32},{NOTE_B4,32},{NOTE_C5,4},{NOTE_D5,16},{NOTE_DS5,16},{NOTE_E5,-8},{NOTE_E5,16},{NOTE_F5,16},{NOTE_A4,16},{NOTE_C5,4},{NOTE_D5,-16},{NOTE_B4,32},{NOTE_C5,32},{NOTE_G5,32},{NOTE_G4,32},{NOTE_G5,32},{NOTE_A4,32},{NOTE_G5,32},{NOTE_B4,32},{NOTE_G5,32},{NOTE_C5,32},{NOTE_G5,32},{NOTE_D5,32},{NOTE_G5,32},{NOTE_E5,32},{NOTE_G5,32},{NOTE_C6,32},{NOTE_B5,32},{NOTE_A5,32},{NOTE_G5,32},{NOTE_F5,32},{NOTE_E5,32},{NOTE_D5,32},{NOTE_G5,32},{NOTE_F5,32},{NOTE_D5,32},{NOTE_C5,32},{NOTE_G5,32},{NOTE_G4,32},{NOTE_G5,32},{NOTE_A4,32},{NOTE_G5,32},{NOTE_B4,32},{NOTE_G5,32},{NOTE_C5,32},{NOTE_G5,32},{NOTE_D5,32},{NOTE_G5,32},{NOTE_E5,32},{NOTE_G5,32},{NOTE_C6,32},{NOTE_B5,32},{NOTE_A5,32},{NOTE_G5,32},{NOTE_F5,32},{NOTE_E5,32},{NOTE_D5,32},{NOTE_G5,32},{NOTE_F5,32},{NOTE_D5,32},{NOTE_E5,32},{NOTE_F5,32},{NOTE_E5,32},{NOTE_DS5,32},{NOTE_E5,32},{NOTE_B4,32},{NOTE_E5,32},{NOTE_DS5,32},{NOTE_E5,32},{NOTE_B4,32},{NOTE_E5,32},{NOTE_DS5,32},{NOTE_E5,-8},{NOTE_B4,16},{NOTE_E5,16},{NOTE_DS5,16},{NOTE_E5,-8},{NOTE_B4,16},{NOTE_E5,16},{REST,16},{REST,16},{NOTE_DS5,16},{NOTE_E5,16},{REST,16},{REST,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_B4,16},{NOTE_D5,16},{NOTE_C5,16},{NOTE_A4,8},{REST,16},{NOTE_C4,16},{NOTE_E4,16},{NOTE_A4,16},{NOTE_B4,8},{REST,16},{NOTE_E4,16},{NOTE_GS4,16},{NOTE_B4,16},{NOTE_C5,8},{REST,16},{NOTE_E4,16},{NOTE_E5,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_B4,16},{NOTE_D5,16},{NOTE_C5,16},{NOTE_A4,8},{REST,16},{NOTE_C4,16},{NOTE_E4,16},{NOTE_A4,16},{NOTE_B4,8},{REST,16},{NOTE_E4,16},{NOTE_C5,16},{NOTE_B4,16},{NOTE_A4,8},{REST,16},{NOTE_B4,16},{NOTE_C5,16},{NOTE_D5,16},{NOTE_E5,-8},{NOTE_G4,16},{NOTE_F5,16},{NOTE_E5,16},{NOTE_D5,-8},{NOTE_F4,16},{NOTE_E5,16},{NOTE_D5,16},{NOTE_C5,-8},{NOTE_E4,16},{NOTE_D5,16},{NOTE_C5,16},{NOTE_B4,8},{REST,16},{NOTE_E4,16},{NOTE_E5,16},{REST,16},{REST,16},{NOTE_E5,16},{NOTE_E6,16},{REST,16},{REST,16},{NOTE_DS5,16},{NOTE_E5,16},{REST,16},{REST,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_D5,16},{NOTE_E5,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_B4,16},{NOTE_D5,16},{NOTE_C5,16},{NOTE_A4,8},{REST,16},{NOTE_C4,16},{NOTE_E4,16},{NOTE_A4,16},{NOTE_B4,8},{REST,16},{NOTE_E4,16},{NOTE_GS4,16},{NOTE_B4,16},{NOTE_C5,8},{REST,16},{NOTE_E4,16},{NOTE_E5,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_B4,16},{NOTE_D5,16},{NOTE_C5,16},{NOTE_A4,8},{REST,16},{NOTE_C4,16},{NOTE_E4,16},{NOTE_A4,16},{NOTE_B4,8},{REST,16},{NOTE_E4,16},{NOTE_C5,16},{NOTE_B4,16},{NOTE_A4,8},{REST,16},{REST,16},{REST,8},{NOTE_CS5,-4},{NOTE_D5,4},{NOTE_E5,16},{NOTE_F5,16},{NOTE_F5,4},{NOTE_F5,8},{NOTE_E5,-4},{NOTE_D5,4},{NOTE_C5,16},{NOTE_B4,16},{NOTE_A4,4},{NOTE_A4,8},{NOTE_A4,8},{NOTE_C5,8},{NOTE_B4,8},{NOTE_A4,-4},{NOTE_CS5,-4},{NOTE_D5,4},{NOTE_E5,16},{NOTE_F5,16},{NOTE_F5,4},{NOTE_F5,8},{NOTE_F5,-4},{NOTE_DS5,4},{NOTE_D5,16},{NOTE_C5,16},{NOTE_AS4,4},{NOTE_A4,8},{NOTE_GS4,4},{NOTE_G4,8},{NOTE_A4,-4},{NOTE_B4,4},{REST,8},{NOTE_A3,-32},{NOTE_C4,-32},{NOTE_E4,-32},{NOTE_A4,-32},{NOTE_C5,-32},{NOTE_E5,-32},{NOTE_D5,-32},{NOTE_C5,-32},{NOTE_B4,-32},{NOTE_A4,-32},{NOTE_C5,-32},{NOTE_E5,-32},{NOTE_A5,-32},{NOTE_C6,-32},{NOTE_E6,-32},{NOTE_D6,-32},{NOTE_C6,-32},{NOTE_B5,-32},{NOTE_A4,-32},{NOTE_C5,-32},{NOTE_E5,-32},{NOTE_A5,-32},{NOTE_C6,-32},{NOTE_E6,-32},{NOTE_D6,-32},{NOTE_C6,-32},{NOTE_B5,-32},{NOTE_AS5,-32},{NOTE_A5,-32},{NOTE_GS5,-32},{NOTE_G5,-32},{NOTE_FS5,-32},{NOTE_F5,-32},{NOTE_E5,-32},{NOTE_DS5,-32},{NOTE_D5,-32},{NOTE_CS5,-32},{NOTE_C5,-32},{NOTE_B4,-32},{NOTE_AS4,-32},{NOTE_A4,-32},{NOTE_GS4,-32},{NOTE_G4,-32},{NOTE_FS4,-32},{NOTE_F4,-32},{NOTE_E4,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_B4,16},{NOTE_D5,16},{NOTE_C5,16},{NOTE_A4,-8},{NOTE_C4,16},{NOTE_E4,16},{NOTE_A4,16},{NOTE_B4,-8},{NOTE_E4,16},{NOTE_GS4,16},{NOTE_B4,16},{NOTE_C5,8},{REST,16},{NOTE_E4,16},{NOTE_E5,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_B4,16},{NOTE_D5,16},{NOTE_C5,16},{NOTE_A4,-8},{NOTE_C4,16},{NOTE_E4,16},{NOTE_A4,16},{NOTE_B4,-8},{NOTE_E4,16},{NOTE_C5,16},{NOTE_B4,16},{NOTE_A4,-8},{REST,-8},{REST,-8},{NOTE_G4,16},{NOTE_F5,16},{NOTE_E5,16},{NOTE_D5,4},{REST,8},{REST,-8},{NOTE_E4,16},{NOTE_D5,16},{NOTE_C5,16},{NOTE_B4,-8},{NOTE_E4,16},{NOTE_E5,8},{NOTE_E5,8},{NOTE_E6,-8},{NOTE_DS5,16},{NOTE_E5,16},{REST,16},{REST,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_B4,16},{NOTE_D5,16},{NOTE_C5,16},{NOTE_A4,-8},{NOTE_C4,16},{NOTE_E4,16},{NOTE_A4,16},{NOTE_B4,-8},{NOTE_E4,16},{NOTE_GS4,16},{NOTE_B4,16},{NOTE_C5,8},{REST,16},{NOTE_E4,16},{NOTE_E5,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_DS5,16},{NOTE_E5,16},{NOTE_B4,16},{NOTE_D5,16},{NOTE_C5,16},{NOTE_A4,-8},{NOTE_C4,16},{NOTE_E4,16},{NOTE_A4,16},{NOTE_B4,-8},{NOTE_E4,16},{NOTE_C5,16},{NOTE_B4,16},{NOTE_A4,-4}};
+    struct Tone fur_elise[] = {{NOTE_E5,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_B4,188},{NOTE_D5,188},{NOTE_C5,188},{NOTE_A4,375},{NOTE_C4,188},{NOTE_E4,188},{NOTE_A4,188},{NOTE_B4,375},{NOTE_E4,188},{NOTE_GS4,188},{NOTE_B4,188},{NOTE_C5,250},{REST,188},{NOTE_E4,188},{NOTE_E5,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_B4,188},{NOTE_D5,188},{NOTE_C5,188},{NOTE_A4,375},{NOTE_C4,188},{NOTE_E4,188},{NOTE_A4,188},{NOTE_B4,375},{NOTE_E4,188},{NOTE_C5,188},{NOTE_B4,188},{NOTE_A4,750},{REST,250},{NOTE_E5,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_B4,188},{NOTE_D5,188},{NOTE_C5,188},{NOTE_A4,375},{NOTE_C4,188},{NOTE_E4,188},{NOTE_A4,188},{NOTE_B4,375},{NOTE_E4,188},{NOTE_GS4,188},{NOTE_B4,188},{NOTE_C5,250},{REST,188},{NOTE_E4,188},{NOTE_E5,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_B4,188},{NOTE_D5,188},{NOTE_C5,188},{NOTE_A4,375},{NOTE_C4,188},{NOTE_E4,188},{NOTE_A4,188},{NOTE_B4,375},{NOTE_E4,188},{NOTE_C5,188},{NOTE_B4,188},{NOTE_A4,250},{REST,188},{NOTE_B4,188},{NOTE_C5,188},{NOTE_D5,188},{NOTE_E5,375},{NOTE_G4,188},{NOTE_F5,188},{NOTE_E5,188},{NOTE_D5,375},{NOTE_F4,188},{NOTE_E5,188},{NOTE_D5,188},{NOTE_C5,375},{NOTE_E4,188},{NOTE_D5,188},{NOTE_C5,188},{NOTE_B4,250},{REST,188},{NOTE_E4,188},{NOTE_E5,188},{REST,188},{REST,188},{NOTE_E5,188},{NOTE_E6,188},{REST,188},{REST,188},{NOTE_DS5,188},{NOTE_E5,188},{REST,188},{REST,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_B4,188},{NOTE_D5,188},{NOTE_C5,188},{NOTE_A4,250},{REST,188},{NOTE_C4,188},{NOTE_E4,188},{NOTE_A4,188},{NOTE_B4,250},{REST,188},{NOTE_E4,188},{NOTE_GS4,188},{NOTE_B4,188},{NOTE_C5,250},{REST,188},{NOTE_E4,188},{NOTE_E5,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_B4,188},{NOTE_D5,188},{NOTE_C5,188},{NOTE_A4,250},{REST,188},{NOTE_C4,188},{NOTE_E4,188},{NOTE_A4,188},{NOTE_B4,250},{REST,188},{NOTE_E4,188},{NOTE_C5,188},{NOTE_B4,188},{NOTE_A4,250},{REST,188},{NOTE_B4,188},{NOTE_C5,188},{NOTE_D5,188},{NOTE_E5,375},{NOTE_G4,188},{NOTE_F5,188},{NOTE_E5,188},{NOTE_D5,375},{NOTE_F4,188},{NOTE_E5,188},{NOTE_D5,188},{NOTE_C5,375},{NOTE_E4,188},{NOTE_D5,188},{NOTE_C5,188},{NOTE_B4,250},{REST,188},{NOTE_E4,188},{NOTE_E5,188},{REST,188},{REST,188},{NOTE_E5,188},{NOTE_E6,188},{REST,188},{REST,188},{NOTE_DS5,188},{NOTE_E5,188},{REST,188},{REST,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_B4,188},{NOTE_D5,188},{NOTE_C5,188},{NOTE_A4,250},{REST,188},{NOTE_C4,188},{NOTE_E4,188},{NOTE_A4,188},{NOTE_B4,250},{REST,188},{NOTE_E4,188},{NOTE_GS4,188},{NOTE_B4,188},{NOTE_C5,250},{REST,188},{NOTE_E4,188},{NOTE_E5,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_B4,188},{NOTE_D5,188},{NOTE_C5,188},{NOTE_A4,250},{REST,188},{NOTE_C4,188},{NOTE_E4,188},{NOTE_A4,188},{NOTE_B4,250},{REST,188},{NOTE_E4,188},{NOTE_C5,188},{NOTE_B4,188},{NOTE_A4,250},{REST,188},{NOTE_C5,188},{NOTE_C5,188},{NOTE_C5,188},{NOTE_C5,750},{NOTE_F5,282},{NOTE_E5,94},{NOTE_E5,250},{NOTE_D5,250},{NOTE_AS5,282},{NOTE_A5,94},{NOTE_A5,188},{NOTE_G5,188},{NOTE_F5,188},{NOTE_E5,188},{NOTE_D5,188},{NOTE_C5,188},{NOTE_AS4,250},{NOTE_A4,250},{NOTE_A4,94},{NOTE_G4,94},{NOTE_A4,94},{NOTE_B4,94},{NOTE_C5,750},{NOTE_D5,188},{NOTE_DS5,188},{NOTE_E5,375},{NOTE_E5,188},{NOTE_F5,188},{NOTE_A4,188},{NOTE_C5,750},{NOTE_D5,282},{NOTE_B4,94},{NOTE_C5,94},{NOTE_G5,94},{NOTE_G4,94},{NOTE_G5,94},{NOTE_A4,94},{NOTE_G5,94},{NOTE_B4,94},{NOTE_G5,94},{NOTE_C5,94},{NOTE_G5,94},{NOTE_D5,94},{NOTE_G5,94},{NOTE_E5,94},{NOTE_G5,94},{NOTE_C6,94},{NOTE_B5,94},{NOTE_A5,94},{NOTE_G5,94},{NOTE_F5,94},{NOTE_E5,94},{NOTE_D5,94},{NOTE_G5,94},{NOTE_F5,94},{NOTE_D5,94},{NOTE_C5,94},{NOTE_G5,94},{NOTE_G4,94},{NOTE_G5,94},{NOTE_A4,94},{NOTE_G5,94},{NOTE_B4,94},{NOTE_G5,94},{NOTE_C5,94},{NOTE_G5,94},{NOTE_D5,94},{NOTE_G5,94},{NOTE_E5,94},{NOTE_G5,94},{NOTE_C6,94},{NOTE_B5,94},{NOTE_A5,94},{NOTE_G5,94},{NOTE_F5,94},{NOTE_E5,94},{NOTE_D5,94},{NOTE_G5,94},{NOTE_F5,94},{NOTE_D5,94},{NOTE_E5,94},{NOTE_F5,94},{NOTE_E5,94},{NOTE_DS5,94},{NOTE_E5,94},{NOTE_B4,94},{NOTE_E5,94},{NOTE_DS5,94},{NOTE_E5,94},{NOTE_B4,94},{NOTE_E5,94},{NOTE_DS5,94},{NOTE_E5,375},{NOTE_B4,188},{NOTE_E5,188},{NOTE_DS5,188},{NOTE_E5,375},{NOTE_B4,188},{NOTE_E5,188},{REST,188},{REST,188},{NOTE_DS5,188},{NOTE_E5,188},{REST,188},{REST,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_B4,188},{NOTE_D5,188},{NOTE_C5,188},{NOTE_A4,250},{REST,188},{NOTE_C4,188},{NOTE_E4,188},{NOTE_A4,188},{NOTE_B4,250},{REST,188},{NOTE_E4,188},{NOTE_GS4,188},{NOTE_B4,188},{NOTE_C5,250},{REST,188},{NOTE_E4,188},{NOTE_E5,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_B4,188},{NOTE_D5,188},{NOTE_C5,188},{NOTE_A4,250},{REST,188},{NOTE_C4,188},{NOTE_E4,188},{NOTE_A4,188},{NOTE_B4,250},{REST,188},{NOTE_E4,188},{NOTE_C5,188},{NOTE_B4,188},{NOTE_A4,250},{REST,188},{NOTE_B4,188},{NOTE_C5,188},{NOTE_D5,188},{NOTE_E5,375},{NOTE_G4,188},{NOTE_F5,188},{NOTE_E5,188},{NOTE_D5,375},{NOTE_F4,188},{NOTE_E5,188},{NOTE_D5,188},{NOTE_C5,375},{NOTE_E4,188},{NOTE_D5,188},{NOTE_C5,188},{NOTE_B4,250},{REST,188},{NOTE_E4,188},{NOTE_E5,188},{REST,188},{REST,188},{NOTE_E5,188},{NOTE_E6,188},{REST,188},{REST,188},{NOTE_DS5,188},{NOTE_E5,188},{REST,188},{REST,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_D5,188},{NOTE_E5,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_B4,188},{NOTE_D5,188},{NOTE_C5,188},{NOTE_A4,250},{REST,188},{NOTE_C4,188},{NOTE_E4,188},{NOTE_A4,188},{NOTE_B4,250},{REST,188},{NOTE_E4,188},{NOTE_GS4,188},{NOTE_B4,188},{NOTE_C5,250},{REST,188},{NOTE_E4,188},{NOTE_E5,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_B4,188},{NOTE_D5,188},{NOTE_C5,188},{NOTE_A4,250},{REST,188},{NOTE_C4,188},{NOTE_E4,188},{NOTE_A4,188},{NOTE_B4,250},{REST,188},{NOTE_E4,188},{NOTE_C5,188},{NOTE_B4,188},{NOTE_A4,250},{REST,188},{REST,188},{REST,250},{NOTE_CS5,1125},{NOTE_D5,750},{NOTE_E5,188},{NOTE_F5,188},{NOTE_F5,750},{NOTE_F5,250},{NOTE_E5,1125},{NOTE_D5,750},{NOTE_C5,188},{NOTE_B4,188},{NOTE_A4,750},{NOTE_A4,250},{NOTE_A4,250},{NOTE_C5,250},{NOTE_B4,250},{NOTE_A4,1125},{NOTE_CS5,1125},{NOTE_D5,750},{NOTE_E5,188},{NOTE_F5,188},{NOTE_F5,750},{NOTE_F5,250},{NOTE_F5,1125},{NOTE_DS5,750},{NOTE_D5,188},{NOTE_C5,188},{NOTE_AS4,750},{NOTE_A4,250},{NOTE_GS4,750},{NOTE_G4,250},{NOTE_A4,1125},{NOTE_B4,750},{REST,250},{NOTE_A3,141},{NOTE_C4,141},{NOTE_E4,141},{NOTE_A4,141},{NOTE_C5,141},{NOTE_E5,141},{NOTE_D5,141},{NOTE_C5,141},{NOTE_B4,141},{NOTE_A4,141},{NOTE_C5,141},{NOTE_E5,141},{NOTE_A5,141},{NOTE_C6,141},{NOTE_E6,141},{NOTE_D6,141},{NOTE_C6,141},{NOTE_B5,141},{NOTE_A4,141},{NOTE_C5,141},{NOTE_E5,141},{NOTE_A5,141},{NOTE_C6,141},{NOTE_E6,141},{NOTE_D6,141},{NOTE_C6,141},{NOTE_B5,141},{NOTE_AS5,141},{NOTE_A5,141},{NOTE_GS5,141},{NOTE_G5,141},{NOTE_FS5,141},{NOTE_F5,141},{NOTE_E5,141},{NOTE_DS5,141},{NOTE_D5,141},{NOTE_CS5,141},{NOTE_C5,141},{NOTE_B4,141},{NOTE_AS4,141},{NOTE_A4,141},{NOTE_GS4,141},{NOTE_G4,141},{NOTE_FS4,141},{NOTE_F4,141},{NOTE_E4,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_B4,188},{NOTE_D5,188},{NOTE_C5,188},{NOTE_A4,375},{NOTE_C4,188},{NOTE_E4,188},{NOTE_A4,188},{NOTE_B4,375},{NOTE_E4,188},{NOTE_GS4,188},{NOTE_B4,188},{NOTE_C5,250},{REST,188},{NOTE_E4,188},{NOTE_E5,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_B4,188},{NOTE_D5,188},{NOTE_C5,188},{NOTE_A4,375},{NOTE_C4,188},{NOTE_E4,188},{NOTE_A4,188},{NOTE_B4,375},{NOTE_E4,188},{NOTE_C5,188},{NOTE_B4,188},{NOTE_A4,375},{REST,375},{REST,375},{NOTE_G4,188},{NOTE_F5,188},{NOTE_E5,188},{NOTE_D5,750},{REST,250},{REST,375},{NOTE_E4,188},{NOTE_D5,188},{NOTE_C5,188},{NOTE_B4,375},{NOTE_E4,188},{NOTE_E5,250},{NOTE_E5,250},{NOTE_E6,375},{NOTE_DS5,188},{NOTE_E5,188},{REST,188},{REST,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_B4,188},{NOTE_D5,188},{NOTE_C5,188},{NOTE_A4,375},{NOTE_C4,188},{NOTE_E4,188},{NOTE_A4,188},{NOTE_B4,375},{NOTE_E4,188},{NOTE_GS4,188},{NOTE_B4,188},{NOTE_C5,250},{REST,188},{NOTE_E4,188},{NOTE_E5,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_DS5,188},{NOTE_E5,188},{NOTE_B4,188},{NOTE_D5,188},{NOTE_C5,188},{NOTE_A4,375},{NOTE_C4,188},{NOTE_E4,188},{NOTE_A4,188},{NOTE_B4,375},{NOTE_E4,188},{NOTE_C5,188},{NOTE_B4,188},{NOTE_A4,1125}};
     // Insert tones into dictionary
     insert(playlist, "super_mario_bros", 0, super_mario_bros, sizeof(super_mario_bros) / sizeof(struct Tone));
     insert(playlist, "hedwig_theme", 1, hedwig_theme, sizeof(hedwig_theme) / sizeof(struct Tone));
@@ -326,11 +341,12 @@ void initTonesDictionary() {
 /* USER CODE END 0 */
 
 /**
- * @brief  The application entry point.
- * @retval int
- */
-int main(void) {
-	/* USER CODE BEGIN 1 */
+  * @brief  The application entry point.
+  * @retval int
+  */
+int main(void)
+{
+  /* USER CODE BEGIN 1 */
 	struct digit _digits[10];
 	_digits[0].number = 0;
 	_digits[0].anti_pattern = GPIO_PIN_12 | GPIO_PIN_13 | GPIO_PIN_14
@@ -377,14 +393,14 @@ int main(void) {
 		digits[i] = _digits[i];
 	}
 
-	/* USER CODE END 1 */
+  /* USER CODE END 1 */
 
-	/* MCU Configuration--------------------------------------------------------*/
+  /* MCU Configuration--------------------------------------------------------*/
 
-	/* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-	HAL_Init();
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  HAL_Init();
 
-	/* USER CODE BEGIN Init */
+  /* USER CODE BEGIN Init */
 
 	//Set 7-segment PINS
 	led[0] = GPIO_PIN_1;
@@ -392,24 +408,25 @@ int main(void) {
 	led[2] = GPIO_PIN_3;
 	led[3] = GPIO_PIN_4;
 
-	/* USER CODE END Init */
+  /* USER CODE END Init */
 
-	/* Configure the system clock */
-	SystemClock_Config();
+  /* Configure the system clock */
+  SystemClock_Config();
 
-	/* USER CODE BEGIN SysInit */
+  /* USER CODE BEGIN SysInit */
 
-	/* USER CODE END SysInit */
+  /* USER CODE END SysInit */
 
-	/* Initialize all configured peripherals */
-	MX_GPIO_Init();
-	MX_I2C1_Init();
-	MX_SPI1_Init();
-	MX_USB_PCD_Init();
-	MX_TIM1_Init();
-	MX_USART1_UART_Init();
-	MX_TIM2_Init();
-	/* USER CODE BEGIN 2 */
+  /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_I2C1_Init();
+  MX_SPI1_Init();
+  MX_USB_PCD_Init();
+  MX_TIM1_Init();
+  MX_TIM2_Init();
+  MX_USART1_UART_Init();
+  MX_ADC1_Init();
+  /* USER CODE BEGIN 2 */
 	HAL_TIM_Base_Start_IT(&htim1);
 	HAL_UART_Transmit_IT(&huart1,
 			"=============\nProgram Running\n=============\n", 44);
@@ -417,387 +434,473 @@ int main(void) {
 	initTonesDictionary();
 	PWM_Start();
 	 int toneCount;
-	 melody = lookup(playlist, "fur_elise", 3, &toneCount);;
+	 melody = lookup(playlist, "hedwig_theme", NULL, &toneCount);;
 	 Change_Melody(melody, toneCount);
-	/* USER CODE END 2 */
 
-	/* Infinite loop */
-	/* USER CODE BEGIN WHILE */
+	 HAL_ADC_Start_IT(&hadc1);
+  /* USER CODE END 2 */
+
+  /* Infinite loop */
+  /* USER CODE BEGIN WHILE */
 	while (1) {
 
-		/* USER CODE END WHILE */
+    /* USER CODE END WHILE */
 
-		/* USER CODE BEGIN 3 */
+    /* USER CODE BEGIN 3 */
 
 	}
-	/* USER CODE END 3 */
+  /* USER CODE END 3 */
 }
 
 /**
- * @brief System Clock Configuration
- * @retval None
- */
-void SystemClock_Config(void) {
-	RCC_OscInitTypeDef RCC_OscInitStruct = { 0 };
-	RCC_ClkInitTypeDef RCC_ClkInitStruct = { 0 };
-	RCC_PeriphCLKInitTypeDef PeriphClkInit = { 0 };
+  * @brief System Clock Configuration
+  * @retval None
+  */
+void SystemClock_Config(void)
+{
+  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+  RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
 
-	/** Initializes the RCC Oscillators according to the specified parameters
-	 * in the RCC_OscInitTypeDef structure.
-	 */
-	RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI
-			| RCC_OSCILLATORTYPE_HSE;
-	RCC_OscInitStruct.HSEState = RCC_HSE_BYPASS;
-	RCC_OscInitStruct.HSEPredivValue = RCC_HSE_PREDIV_DIV1;
-	RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-	RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
-	RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-	RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-	RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL6;
-	if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK) {
-		Error_Handler();
-	}
+  /** Initializes the RCC Oscillators according to the specified parameters
+  * in the RCC_OscInitTypeDef structure.
+  */
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_BYPASS;
+  RCC_OscInitStruct.HSEPredivValue = RCC_HSE_PREDIV_DIV1;
+  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL6;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+    Error_Handler();
+  }
 
-	/** Initializes the CPU, AHB and APB buses clocks
-	 */
-	RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK
-			| RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
-	RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
-	RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-	RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
-	RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+  /** Initializes the CPU, AHB and APB buses clocks
+  */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-	if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK) {
-		Error_Handler();
-	}
-	PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USB
-			| RCC_PERIPHCLK_USART1 | RCC_PERIPHCLK_I2C1 | RCC_PERIPHCLK_TIM1;
-	PeriphClkInit.Usart1ClockSelection = RCC_USART1CLKSOURCE_PCLK2;
-	PeriphClkInit.I2c1ClockSelection = RCC_I2C1CLKSOURCE_HSI;
-	PeriphClkInit.USBClockSelection = RCC_USBCLKSOURCE_PLL;
-	PeriphClkInit.Tim1ClockSelection = RCC_TIM1CLK_HCLK;
-	if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK) {
-		Error_Handler();
-	}
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USB|RCC_PERIPHCLK_USART1
+                              |RCC_PERIPHCLK_I2C1|RCC_PERIPHCLK_TIM1
+                              |RCC_PERIPHCLK_ADC12;
+  PeriphClkInit.Usart1ClockSelection = RCC_USART1CLKSOURCE_PCLK2;
+  PeriphClkInit.Adc12ClockSelection = RCC_ADC12PLLCLK_DIV1;
+  PeriphClkInit.I2c1ClockSelection = RCC_I2C1CLKSOURCE_HSI;
+  PeriphClkInit.USBClockSelection = RCC_USBCLKSOURCE_PLL;
+  PeriphClkInit.Tim1ClockSelection = RCC_TIM1CLK_HCLK;
+  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
+  {
+    Error_Handler();
+  }
 }
 
 /**
- * @brief I2C1 Initialization Function
- * @param None
- * @retval None
- */
-static void MX_I2C1_Init(void) {
+  * @brief ADC1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_ADC1_Init(void)
+{
 
-	/* USER CODE BEGIN I2C1_Init 0 */
+  /* USER CODE BEGIN ADC1_Init 0 */
 
-	/* USER CODE END I2C1_Init 0 */
+  /* USER CODE END ADC1_Init 0 */
 
-	/* USER CODE BEGIN I2C1_Init 1 */
+  ADC_MultiModeTypeDef multimode = {0};
+  ADC_ChannelConfTypeDef sConfig = {0};
 
-	/* USER CODE END I2C1_Init 1 */
-	hi2c1.Instance = I2C1;
-	hi2c1.Init.Timing = 0x2000090E;
-	hi2c1.Init.OwnAddress1 = 0;
-	hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
-	hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
-	hi2c1.Init.OwnAddress2 = 0;
-	hi2c1.Init.OwnAddress2Masks = I2C_OA2_NOMASK;
-	hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
-	hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
-	if (HAL_I2C_Init(&hi2c1) != HAL_OK) {
-		Error_Handler();
-	}
+  /* USER CODE BEGIN ADC1_Init 1 */
 
-	/** Configure Analogue filter
-	 */
-	if (HAL_I2CEx_ConfigAnalogFilter(&hi2c1, I2C_ANALOGFILTER_ENABLE)
-			!= HAL_OK) {
-		Error_Handler();
-	}
+  /* USER CODE END ADC1_Init 1 */
 
-	/** Configure Digital filter
-	 */
-	if (HAL_I2CEx_ConfigDigitalFilter(&hi2c1, 0) != HAL_OK) {
-		Error_Handler();
-	}
-	/* USER CODE BEGIN I2C1_Init 2 */
+  /** Common config
+  */
+  hadc1.Instance = ADC1;
+  hadc1.Init.ClockPrescaler = ADC_CLOCK_ASYNC_DIV1;
+  hadc1.Init.Resolution = ADC_RESOLUTION_12B;
+  hadc1.Init.ScanConvMode = ADC_SCAN_DISABLE;
+  hadc1.Init.ContinuousConvMode = ENABLE;
+  hadc1.Init.DiscontinuousConvMode = DISABLE;
+  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
+  hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+  hadc1.Init.NbrOfConversion = 1;
+  hadc1.Init.DMAContinuousRequests = DISABLE;
+  hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  hadc1.Init.LowPowerAutoWait = DISABLE;
+  hadc1.Init.Overrun = ADC_OVR_DATA_OVERWRITTEN;
+  if (HAL_ADC_Init(&hadc1) != HAL_OK)
+  {
+    Error_Handler();
+  }
 
-	/* USER CODE END I2C1_Init 2 */
+  /** Configure the ADC multi-mode
+  */
+  multimode.Mode = ADC_MODE_INDEPENDENT;
+  if (HAL_ADCEx_MultiModeConfigChannel(&hadc1, &multimode) != HAL_OK)
+  {
+    Error_Handler();
+  }
 
-}
+  /** Configure Regular Channel
+  */
+  sConfig.Channel = ADC_CHANNEL_5;
+  sConfig.Rank = ADC_REGULAR_RANK_1;
+  sConfig.SingleDiff = ADC_SINGLE_ENDED;
+  sConfig.SamplingTime = ADC_SAMPLETIME_181CYCLES_5;
+  sConfig.OffsetNumber = ADC_OFFSET_NONE;
+  sConfig.Offset = 0;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN ADC1_Init 2 */
 
-/**
- * @brief SPI1 Initialization Function
- * @param None
- * @retval None
- */
-static void MX_SPI1_Init(void) {
-
-	/* USER CODE BEGIN SPI1_Init 0 */
-
-	/* USER CODE END SPI1_Init 0 */
-
-	/* USER CODE BEGIN SPI1_Init 1 */
-
-	/* USER CODE END SPI1_Init 1 */
-	/* SPI1 parameter configuration*/
-	hspi1.Instance = SPI1;
-	hspi1.Init.Mode = SPI_MODE_MASTER;
-	hspi1.Init.Direction = SPI_DIRECTION_2LINES;
-	hspi1.Init.DataSize = SPI_DATASIZE_4BIT;
-	hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
-	hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
-	hspi1.Init.NSS = SPI_NSS_SOFT;
-	hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_4;
-	hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
-	hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
-	hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
-	hspi1.Init.CRCPolynomial = 7;
-	hspi1.Init.CRCLength = SPI_CRC_LENGTH_DATASIZE;
-	hspi1.Init.NSSPMode = SPI_NSS_PULSE_ENABLE;
-	if (HAL_SPI_Init(&hspi1) != HAL_OK) {
-		Error_Handler();
-	}
-	/* USER CODE BEGIN SPI1_Init 2 */
-
-	/* USER CODE END SPI1_Init 2 */
+  /* USER CODE END ADC1_Init 2 */
 
 }
 
 /**
- * @brief TIM1 Initialization Function
- * @param None
- * @retval None
- */
-static void MX_TIM1_Init(void) {
+  * @brief I2C1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C1_Init(void)
+{
 
-	/* USER CODE BEGIN TIM1_Init 0 */
+  /* USER CODE BEGIN I2C1_Init 0 */
 
-	/* USER CODE END TIM1_Init 0 */
+  /* USER CODE END I2C1_Init 0 */
 
-	TIM_ClockConfigTypeDef sClockSourceConfig = { 0 };
-	TIM_MasterConfigTypeDef sMasterConfig = { 0 };
+  /* USER CODE BEGIN I2C1_Init 1 */
 
-	/* USER CODE BEGIN TIM1_Init 1 */
+  /* USER CODE END I2C1_Init 1 */
+  hi2c1.Instance = I2C1;
+  hi2c1.Init.Timing = 0x2000090E;
+  hi2c1.Init.OwnAddress1 = 0;
+  hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c1.Init.OwnAddress2 = 0;
+  hi2c1.Init.OwnAddress2Masks = I2C_OA2_NOMASK;
+  hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c1) != HAL_OK)
+  {
+    Error_Handler();
+  }
 
-	/* USER CODE END TIM1_Init 1 */
-	htim1.Instance = TIM1;
-	htim1.Init.Prescaler = 4800 - 1;
-	htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-	htim1.Init.Period = 5 - 1;
-	htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-	htim1.Init.RepetitionCounter = 0;
-	htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-	if (HAL_TIM_Base_Init(&htim1) != HAL_OK) {
-		Error_Handler();
-	}
-	sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-	if (HAL_TIM_ConfigClockSource(&htim1, &sClockSourceConfig) != HAL_OK) {
-		Error_Handler();
-	}
-	sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-	sMasterConfig.MasterOutputTrigger2 = TIM_TRGO2_RESET;
-	sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-	if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig)
-			!= HAL_OK) {
-		Error_Handler();
-	}
-	/* USER CODE BEGIN TIM1_Init 2 */
+  /** Configure Analogue filter
+  */
+  if (HAL_I2CEx_ConfigAnalogFilter(&hi2c1, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
+  {
+    Error_Handler();
+  }
 
-	/* USER CODE END TIM1_Init 2 */
+  /** Configure Digital filter
+  */
+  if (HAL_I2CEx_ConfigDigitalFilter(&hi2c1, 0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C1_Init 2 */
 
-}
-
-/**
- * @brief TIM2 Initialization Function
- * @param None
- * @retval None
- */
-static void MX_TIM2_Init(void) {
-
-	/* USER CODE BEGIN TIM2_Init 0 */
-
-	/* USER CODE END TIM2_Init 0 */
-
-	TIM_ClockConfigTypeDef sClockSourceConfig = { 0 };
-	TIM_MasterConfigTypeDef sMasterConfig = { 0 };
-	TIM_OC_InitTypeDef sConfigOC = { 0 };
-
-	/* USER CODE BEGIN TIM2_Init 1 */
-
-	/* USER CODE END TIM2_Init 1 */
-	htim2.Instance = TIM2;
-	htim2.Init.Prescaler = 0;
-	htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-	htim2.Init.Period = 4294967295;
-	htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-	htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-	if (HAL_TIM_Base_Init(&htim2) != HAL_OK) {
-		Error_Handler();
-	}
-	sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-	if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK) {
-		Error_Handler();
-	}
-	if (HAL_TIM_PWM_Init(&htim2) != HAL_OK) {
-		Error_Handler();
-	}
-	sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-	sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-	if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig)
-			!= HAL_OK) {
-		Error_Handler();
-	}
-	sConfigOC.OCMode = TIM_OCMODE_PWM1;
-	sConfigOC.Pulse = 0;
-	sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
-	sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
-	if (HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_1)
-			!= HAL_OK) {
-		Error_Handler();
-	}
-	/* USER CODE BEGIN TIM2_Init 2 */
-
-	/* USER CODE END TIM2_Init 2 */
-	HAL_TIM_MspPostInit(&htim2);
+  /* USER CODE END I2C1_Init 2 */
 
 }
 
 /**
- * @brief USART1 Initialization Function
- * @param None
- * @retval None
- */
-static void MX_USART1_UART_Init(void) {
+  * @brief SPI1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_SPI1_Init(void)
+{
 
-	/* USER CODE BEGIN USART1_Init 0 */
+  /* USER CODE BEGIN SPI1_Init 0 */
 
-	/* USER CODE END USART1_Init 0 */
+  /* USER CODE END SPI1_Init 0 */
 
-	/* USER CODE BEGIN USART1_Init 1 */
+  /* USER CODE BEGIN SPI1_Init 1 */
 
-	/* USER CODE END USART1_Init 1 */
-	huart1.Instance = USART1;
-	huart1.Init.BaudRate = 115200;
-	huart1.Init.WordLength = UART_WORDLENGTH_8B;
-	huart1.Init.StopBits = UART_STOPBITS_1;
-	huart1.Init.Parity = UART_PARITY_NONE;
-	huart1.Init.Mode = UART_MODE_TX_RX;
-	huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-	huart1.Init.OverSampling = UART_OVERSAMPLING_16;
-	huart1.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
-	huart1.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
-	if (HAL_UART_Init(&huart1) != HAL_OK) {
-		Error_Handler();
-	}
-	/* USER CODE BEGIN USART1_Init 2 */
+  /* USER CODE END SPI1_Init 1 */
+  /* SPI1 parameter configuration*/
+  hspi1.Instance = SPI1;
+  hspi1.Init.Mode = SPI_MODE_MASTER;
+  hspi1.Init.Direction = SPI_DIRECTION_2LINES;
+  hspi1.Init.DataSize = SPI_DATASIZE_4BIT;
+  hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
+  hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi1.Init.NSS = SPI_NSS_SOFT;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_4;
+  hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
+  hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
+  hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+  hspi1.Init.CRCPolynomial = 7;
+  hspi1.Init.CRCLength = SPI_CRC_LENGTH_DATASIZE;
+  hspi1.Init.NSSPMode = SPI_NSS_PULSE_ENABLE;
+  if (HAL_SPI_Init(&hspi1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN SPI1_Init 2 */
 
-	/* USER CODE END USART1_Init 2 */
-
-}
-
-/**
- * @brief USB Initialization Function
- * @param None
- * @retval None
- */
-static void MX_USB_PCD_Init(void) {
-
-	/* USER CODE BEGIN USB_Init 0 */
-
-	/* USER CODE END USB_Init 0 */
-
-	/* USER CODE BEGIN USB_Init 1 */
-
-	/* USER CODE END USB_Init 1 */
-	hpcd_USB_FS.Instance = USB;
-	hpcd_USB_FS.Init.dev_endpoints = 8;
-	hpcd_USB_FS.Init.speed = PCD_SPEED_FULL;
-	hpcd_USB_FS.Init.phy_itface = PCD_PHY_EMBEDDED;
-	hpcd_USB_FS.Init.low_power_enable = DISABLE;
-	hpcd_USB_FS.Init.battery_charging_enable = DISABLE;
-	if (HAL_PCD_Init(&hpcd_USB_FS) != HAL_OK) {
-		Error_Handler();
-	}
-	/* USER CODE BEGIN USB_Init 2 */
-
-	/* USER CODE END USB_Init 2 */
+  /* USER CODE END SPI1_Init 2 */
 
 }
 
 /**
- * @brief GPIO Initialization Function
- * @param None
- * @retval None
- */
-static void MX_GPIO_Init(void) {
-	GPIO_InitTypeDef GPIO_InitStruct = { 0 };
+  * @brief TIM1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM1_Init(void)
+{
 
-	/* GPIO Ports Clock Enable */
-	__HAL_RCC_GPIOE_CLK_ENABLE();
-	__HAL_RCC_GPIOC_CLK_ENABLE();
-	__HAL_RCC_GPIOF_CLK_ENABLE();
-	__HAL_RCC_GPIOA_CLK_ENABLE();
-	__HAL_RCC_GPIOD_CLK_ENABLE();
-	__HAL_RCC_GPIOB_CLK_ENABLE();
+  /* USER CODE BEGIN TIM1_Init 0 */
 
-	/*Configure GPIO pin Output Level */
-	HAL_GPIO_WritePin(CS_I2C_SPI_GPIO_Port, CS_I2C_SPI_Pin, GPIO_PIN_RESET);
+  /* USER CODE END TIM1_Init 0 */
 
-	/*Configure GPIO pin Output Level */
-	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2,
-			GPIO_PIN_RESET);
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
 
-	/*Configure GPIO pin Output Level */
-	HAL_GPIO_WritePin(GPIOD,
-			GPIO_PIN_12 | GPIO_PIN_13 | GPIO_PIN_14 | GPIO_PIN_15 | GPIO_PIN_1
-					| GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4, GPIO_PIN_RESET);
+  /* USER CODE BEGIN TIM1_Init 1 */
 
+  /* USER CODE END TIM1_Init 1 */
+  htim1.Instance = TIM1;
+  htim1.Init.Prescaler = 4800-1;
+  htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim1.Init.Period = 5-1;
+  htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim1.Init.RepetitionCounter = 0;
+  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim1, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterOutputTrigger2 = TIM_TRGO2_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM1_Init 2 */
 
-	/*Configure GPIO pin : CS_I2C_SPI_Pin */
-	GPIO_InitStruct.Pin = CS_I2C_SPI_Pin;
-	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-	GPIO_InitStruct.Pull = GPIO_NOPULL;
-	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-	HAL_GPIO_Init(CS_I2C_SPI_GPIO_Port, &GPIO_InitStruct);
+  /* USER CODE END TIM1_Init 2 */
 
-	/*Configure GPIO pins : PC0 PC1 PC2 */
-	GPIO_InitStruct.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2;
-	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-	GPIO_InitStruct.Pull = GPIO_NOPULL;
-	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-	HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+}
 
-	/*Configure GPIO pin : PA0 */
-	GPIO_InitStruct.Pin = GPIO_PIN_0;
-	GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
-	GPIO_InitStruct.Pull = GPIO_NOPULL;
-	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+/**
+  * @brief TIM2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM2_Init(void)
+{
 
-	/*Configure GPIO pins : PA1 PA3 */
-	GPIO_InitStruct.Pin = GPIO_PIN_1 | GPIO_PIN_3;
-	GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
-	GPIO_InitStruct.Pull = GPIO_PULLDOWN;
-	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+  /* USER CODE BEGIN TIM2_Init 0 */
 
-	/*Configure GPIO pins : PD12 PD13 PD14 PD15
-	 PD1 PD2 PD3 PD4 */
-	GPIO_InitStruct.Pin = GPIO_PIN_12 | GPIO_PIN_13 | GPIO_PIN_14 | GPIO_PIN_15
-			| GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4;
-	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-	GPIO_InitStruct.Pull = GPIO_NOPULL;
-	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-	HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
+  /* USER CODE END TIM2_Init 0 */
 
-	/* EXTI interrupt init*/
-	HAL_NVIC_SetPriority(EXTI0_IRQn, 0, 0);
-	HAL_NVIC_EnableIRQ(EXTI0_IRQn);
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
 
-	HAL_NVIC_SetPriority(EXTI1_IRQn, 0, 0);
-	HAL_NVIC_EnableIRQ(EXTI1_IRQn);
+  /* USER CODE BEGIN TIM2_Init 1 */
 
-	HAL_NVIC_SetPriority(EXTI3_IRQn, 0, 0);
-	HAL_NVIC_EnableIRQ(EXTI3_IRQn);
+  /* USER CODE END TIM2_Init 1 */
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 0;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 4294967295;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 0;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM2_Init 2 */
+
+  /* USER CODE END TIM2_Init 2 */
+  HAL_TIM_MspPostInit(&htim2);
+
+}
+
+/**
+  * @brief USART1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART1_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART1_Init 0 */
+
+  /* USER CODE END USART1_Init 0 */
+
+  /* USER CODE BEGIN USART1_Init 1 */
+
+  /* USER CODE END USART1_Init 1 */
+  huart1.Instance = USART1;
+  huart1.Init.BaudRate = 115200;
+  huart1.Init.WordLength = UART_WORDLENGTH_8B;
+  huart1.Init.StopBits = UART_STOPBITS_1;
+  huart1.Init.Parity = UART_PARITY_NONE;
+  huart1.Init.Mode = UART_MODE_TX_RX;
+  huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart1.Init.OverSampling = UART_OVERSAMPLING_16;
+  huart1.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
+  huart1.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+  if (HAL_UART_Init(&huart1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART1_Init 2 */
+
+  /* USER CODE END USART1_Init 2 */
+
+}
+
+/**
+  * @brief USB Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USB_PCD_Init(void)
+{
+
+  /* USER CODE BEGIN USB_Init 0 */
+
+  /* USER CODE END USB_Init 0 */
+
+  /* USER CODE BEGIN USB_Init 1 */
+
+  /* USER CODE END USB_Init 1 */
+  hpcd_USB_FS.Instance = USB;
+  hpcd_USB_FS.Init.dev_endpoints = 8;
+  hpcd_USB_FS.Init.speed = PCD_SPEED_FULL;
+  hpcd_USB_FS.Init.phy_itface = PCD_PHY_EMBEDDED;
+  hpcd_USB_FS.Init.low_power_enable = DISABLE;
+  hpcd_USB_FS.Init.battery_charging_enable = DISABLE;
+  if (HAL_PCD_Init(&hpcd_USB_FS) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USB_Init 2 */
+
+  /* USER CODE END USB_Init 2 */
+
+}
+
+/**
+  * @brief GPIO Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_GPIO_Init(void)
+{
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+
+  /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOE_CLK_ENABLE();
+  __HAL_RCC_GPIOC_CLK_ENABLE();
+  __HAL_RCC_GPIOF_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOD_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(CS_I2C_SPI_GPIO_Port, CS_I2C_SPI_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15
+                          |GPIO_PIN_1|GPIO_PIN_2|GPIO_PIN_3|GPIO_PIN_4, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin : CS_I2C_SPI_Pin */
+  GPIO_InitStruct.Pin = CS_I2C_SPI_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(CS_I2C_SPI_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : MEMS_INT3_Pin MEMS_INT4_Pin */
+  GPIO_InitStruct.Pin = MEMS_INT3_Pin|MEMS_INT4_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_EVT_RISING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : PA0 PA2 */
+  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_2;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : PA1 PA3 */
+  GPIO_InitStruct.Pin = GPIO_PIN_1|GPIO_PIN_3;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : PD12 PD13 PD14 PD15
+                           PD1 PD2 PD3 PD4 */
+  GPIO_InitStruct.Pin = GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15
+                          |GPIO_PIN_1|GPIO_PIN_2|GPIO_PIN_3|GPIO_PIN_4;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI0_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI0_IRQn);
+
+  HAL_NVIC_SetPriority(EXTI1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI1_IRQn);
+
+  HAL_NVIC_SetPriority(EXTI2_TSC_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI2_TSC_IRQn);
+
+  HAL_NVIC_SetPriority(EXTI3_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI3_IRQn);
 
 }
 
@@ -999,16 +1102,17 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 /* USER CODE END 4 */
 
 /**
- * @brief  This function is executed in case of error occurrence.
- * @retval None
- */
-void Error_Handler(void) {
-	/* USER CODE BEGIN Error_Handler_Debug */
+  * @brief  This function is executed in case of error occurrence.
+  * @retval None
+  */
+void Error_Handler(void)
+{
+  /* USER CODE BEGIN Error_Handler_Debug */
 	/* User can add his own implementation to report the HAL error return state */
 	__disable_irq();
 	while (1) {
 	}
-	/* USER CODE END Error_Handler_Debug */
+  /* USER CODE END Error_Handler_Debug */
 }
 
 #ifdef  USE_FULL_ASSERT
