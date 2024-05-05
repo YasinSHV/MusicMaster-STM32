@@ -1,4 +1,5 @@
 #Convert Music notes from arduino format to desired format
+#Use https://tuneform.com/tools/time-tempo-bpm-to-milliseconds-ms to convert duration
 def convert_input(input_string):
     notes = input_string.split(',')
     formatted_notes = []

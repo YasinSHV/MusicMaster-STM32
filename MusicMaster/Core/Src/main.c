@@ -417,7 +417,7 @@ int main(void) {
 	initTonesDictionary();
 	PWM_Start();
 	 int toneCount;
-	 melody = lookup(playlist, "doom", 0, &toneCount);;
+	 melody = lookup(playlist, "fur_elise", 3, &toneCount);;
 	 Change_Melody(melody, toneCount);
 	/* USER CODE END 2 */
 
