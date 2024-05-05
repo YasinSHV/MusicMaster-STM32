@@ -44,13 +44,13 @@
 extern struct Dictionary* playlist;
 extern TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef *pwm_timer = &htim2;	// Point to PWM Timer configured in CubeMX
-uint32_t pwm_channel = TIM_CHANNEL_2;   // Select configured PWM channel number
+uint32_t pwm_channel = TIM_CHANNEL_1;   // Select configured PWM channel number
 
 const struct Tone *volatile melody_ptr;
 volatile uint16_t melody_tone_count;
 volatile uint16_t current_tone_number;
 volatile uint32_t current_tone_end;
-volatile uint16_t volume = 50;          // (0 - 1000)
+volatile uint16_t volume = 1;          // (0 - 1000)
 volatile uint32_t last_button_press;
 /* USER CODE END PV */
 
@@ -240,7 +240,7 @@ void SysTick_Handler(void)
   /* USER CODE END SysTick_IRQn 0 */
   HAL_IncTick();
   /* USER CODE BEGIN SysTick_IRQn 1 */
-
+  Update_Melody();
   /* USER CODE END SysTick_IRQn 1 */
 }
 
@@ -261,7 +261,11 @@ void EXTI0_IRQHandler(void)
   /* USER CODE END EXTI0_IRQn 0 */
   HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_0);
   /* USER CODE BEGIN EXTI0_IRQn 1 */
+  if(HAL_GetTick() > last_button_press + 200)
+  {
+	  last_button_press = HAL_GetTick();
 
+  }
   /* USER CODE END EXTI0_IRQn 1 */
 }
 
