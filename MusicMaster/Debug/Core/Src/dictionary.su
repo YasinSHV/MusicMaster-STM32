@@ -1,0 +1,6 @@
+../Core/Src/dictionary.c:29:14:hashString	24	static
+../Core/Src/dictionary.c:38:14:hashNumeric	16	static
+../Core/Src/dictionary.c:43:13:initDictionary	24	static
+../Core/Src/dictionary.c:54:6:insert	32	static
+../Core/Src/dictionary.c:74:14:lookup	32	static
+../Core/Src/dictionary.c:105:6:freeDictionary	32	static

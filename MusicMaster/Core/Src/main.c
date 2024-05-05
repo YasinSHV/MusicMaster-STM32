@@ -18,6 +18,9 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "dictionary.h"
+#include "stm32f3xx_it.h"
+
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -32,10 +35,11 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define DEBOUNCE_DELAY 350
-
 #define PASSWORD_LENGTH 4
-
-uint8_t passwordTx[PASSWORD_LENGTH] = "1234";
+//Use Define to set when the 7-segment is on or off
+//(to support both:{common anode, common cathode)
+#define DISPLAY_ON GPIO_PIN_RESET
+#define DISPLAY_OFF GPIO_PIN_SET
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -79,6 +83,9 @@ struct digit {
 	uint16_t pattern;
 	uint16_t anti_pattern;
 };
+struct Dictionary *playlist = NULL;
+extern const struct Tone *volatile melody_ptr;
+extern volatile uint16_t melody_tone_count;
 
 uint16_t led[4];
 
@@ -120,37 +127,40 @@ enum BuzzerFlag {
 	CorrectInput, WrongInput, CorrectPass, WrongPass, SuperWrongPass, NONE
 };
 enum BuzzerFlag buzzer_flag = NONE;
+
+enum ProgramState{Paused, Resume, IDLE};
+enum ProgramState programState = IDLE;
 uint32_t buzzerCoolDown = 0;
 //PWM BEGIN
-TIM_HandleTypeDef *pwm_timer = &htim2;
-uint32_t pwm_channel = TIM_CHANNEL_1;
-uint16_t _volume = 10;
-
-void PWM_Start() {
-	HAL_TIM_PWM_Start(pwm_timer, pwm_channel);
-}
-void PWM_Stop() {
-	HAL_TIM_PWM_Stop(pwm_timer, pwm_channel);
-}
-
-void PWM_Change_Tone(uint16_t pwm_freq, uint16_t volume) //(1-20000), (0-1000)
-{
-	if (pwm_freq == 0 || pwm_freq > 20000)
-		__HAL_TIM_SET_COMPARE(pwm_timer, pwm_channel, 0);
-	else {
-		const uint32_t internal_clock_freq = HAL_RCC_GetSysClockFreq();
-
-		const uint16_t prescaler = 1 + internal_clock_freq / pwm_freq / 60000;
-		const uint32_t timer_clock = internal_clock_freq / prescaler;
-		const uint32_t period_cycles = timer_clock / pwm_freq;
-		const uint32_t puls_width = volume * period_cycles / 1000 / 2;
-
-		pwm_timer->Instance->PSC = prescaler - 1;
-		pwm_timer->Instance->ARR = period_cycles - 1;
-		pwm_timer->Instance->EGR = TIM_EGR_UG;
-		__HAL_TIM_SET_COMPARE(pwm_timer, pwm_channel, puls_width);
-	}
-}
+//TIM_HandleTypeDef *pwm_timer = &htim2;
+//uint32_t pwm_channel = TIM_CHANNEL_1;
+//uint16_t _volume = 10;
+//
+////void PWM_Start() {
+////	HAL_TIM_PWM_Start(pwm_timer, pwm_channel);
+////}
+////void PWM_Stop() {
+////	HAL_TIM_PWM_Stop(pwm_timer, pwm_channel);
+////}
+////
+////void PWM_Change_Tone(uint16_t pwm_freq, uint16_t volume) //(1-20000), (0-1000)
+////{
+////	if (pwm_freq == 0 || pwm_freq > 20000)
+////		__HAL_TIM_SET_COMPARE(pwm_timer, pwm_channel, 0);
+////	else {
+////		const uint32_t internal_clock_freq = HAL_RCC_GetSysClockFreq();
+////
+////		const uint16_t prescaler = 1 + internal_clock_freq / pwm_freq / 60000;
+////		const uint32_t timer_clock = internal_clock_freq / prescaler;
+////		const uint32_t period_cycles = timer_clock / pwm_freq;
+////		const uint32_t puls_width = volume * period_cycles / 1000 / 2;
+////
+////		pwm_timer->Instance->PSC = prescaler - 1;
+////		pwm_timer->Instance->ARR = period_cycles - 1;
+////		pwm_timer->Instance->EGR = TIM_EGR_UG;
+////		__HAL_TIM_SET_COMPARE(pwm_timer, pwm_channel, puls_width);
+////	}
+////}
 //PWM END
 
 //UART BEGIN
@@ -250,7 +260,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 				if (compareStrings(setVolume, data, 11) == 1
 						&& data[12] == ')') {
 					int v = data[11] - '0';
-					_volume = v * 10;
+//					_volume = v * 10;
 					char massage[24] = "Program Volume Set To  \n";
 					massage[22] = data[11];
 					HAL_UART_Transmit_IT(&huart1, massage, 24);
@@ -274,24 +284,54 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 void display_number(int led_flag, int _number) {
 	HAL_GPIO_WritePin(GPIOD,
 	GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4, GPIO_PIN_SET);
-	HAL_GPIO_WritePin(GPIOD, led[led_flag], GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(GPIOD, led[led_flag], DISPLAY_ON);
 	if (_number != 0) {
 		HAL_GPIO_WritePin(GPIOD, digits[_number].pattern, GPIO_PIN_SET);
 	}
 	HAL_GPIO_WritePin(GPIOD, digits[_number].anti_pattern, GPIO_PIN_RESET);
 }
 
-void increase(int _head) {
-	carrier[_head] += 1;
-	if (carrier[_head] == 10) {
-		carrier[_head] = 0;
-	}
+void increase() {
+    carrier[3]++; // Increase the 1s place
+
+    if (carrier[3] == 10) {
+        carrier[3] = 0; // Reset the 1s place
+        carrier[2]++; // Increase the 10s place
+    }
+    if (carrier[2] == 10) {
+        carrier[2] = 0; // Reset the 10s place
+        carrier[1]++; // Increase the 100s place
+    }
+    if (carrier[1] == 10) {
+        carrier[1] = 0; // Reset the 100s place
+        carrier[0]++; // Increase the 1000s place
+    }
 }
 
 void init_display() {
 	HAL_GPIO_WritePin(GPIOD,
 	GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4, GPIO_PIN_SET);
 }
+
+void initTonesDictionary() {
+    playlist = initDictionary(10);
+
+    // Example tones
+    struct Tone super_mario_bros[]={{2637,306},{0,153},{2637,153},{0,153},{2093,153},{2637,153},{0,153},{3136,153},{0,459},{1586,153},{0,459},{2093,153},{0,306},{1586,153},{0,306},{1319,153},{0,306},{1760,153},{0,153},{1976,153},{0,153},{1865,153},{1760,153},{0,153},{1586,204},{2637,204},{3136,204},{3520,153},{0,153},{2794,153},{3136,153},{0,153},{2637,153},{0,153},{2093,153},{2349,153},{1976,153},{0,306},{2093,153},{0,306},{1586,153},{0,306},{1319,153},{0,306},{1760,153},{0,153},{1976,153},{0,153},{1865,153},{1760,153},{0,153},{1586,204},{2637,204},{3136,204},{3520,153},{0,153},{2794,153},{3136,153},{0,153},{2637,153},{0,153},{2093,153},{2349,153},{1976,153},{0,0}};
+    struct Tone hedwig_theme[]={{REST,750},{NOTE_D4,374},{NOTE_G4,561},{NOTE_AS4,187},{NOTE_A4,374},{NOTE_G4,750},{NOTE_D5,374},{NOTE_C5,1124},{NOTE_A4,1124},{NOTE_G4,561},{NOTE_AS4,187},{NOTE_A4,374},{NOTE_F4,750},{NOTE_GS4,374},{NOTE_D4,2249},{NOTE_D4,374},{NOTE_G4,561},{NOTE_AS4,187},{NOTE_A4,374},{NOTE_G4,750},{NOTE_D5,374},{NOTE_F5,750},{NOTE_E5,374},{NOTE_DS5,750},{NOTE_B4,374},{NOTE_DS5,561},{NOTE_D5,187},{NOTE_CS5,374},{NOTE_CS4,750},{NOTE_B4,374},{NOTE_G4,2249},{NOTE_AS4,374},{NOTE_D5,750},{NOTE_AS4,374},{NOTE_D5,750},{NOTE_AS4,374},{NOTE_DS5,750},{NOTE_D5,374},{NOTE_CS5,750},{NOTE_A4,374},{NOTE_AS4,561},{NOTE_D5,187},{NOTE_CS5,374},{NOTE_CS4,750},{NOTE_D4,374},{NOTE_D5,1700},{REST,150},{NOTE_AS4,374},{NOTE_D5,750},{NOTE_AS4,374},{NOTE_D5,750},{NOTE_AS4,374},{NOTE_F5,750},{NOTE_E5,374},{NOTE_DS5,750},{NOTE_B4,374},{NOTE_DS5,561},{NOTE_D5,187},{NOTE_CS5,374},{NOTE_CS4,750},{NOTE_AS4,374},{NOTE_G4,2249},{0,0}};
+    struct Tone doom[]={{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_B2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,534},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_B2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,534},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_B2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,534},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_B2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_FS3,67},{NOTE_D3,67},{NOTE_B2,67},{NOTE_A3,67},{NOTE_FS3,67},{NOTE_B2,67},{NOTE_D3,67},{NOTE_FS3,67},{NOTE_A3,67},{NOTE_FS3,67},{NOTE_D3,67},{NOTE_B2,67},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_B2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,534},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_B2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_B3,67},{NOTE_G3,67},{NOTE_E3,67},{NOTE_G3,67},{NOTE_B3,67},{NOTE_E4,67},{NOTE_G3,67},{NOTE_B3,67},{NOTE_E4,67},{NOTE_B3,67},{NOTE_G4,67},{NOTE_B4,67},{NOTE_A2,133},{NOTE_A2,133},{NOTE_A3,133},{NOTE_A2,133},{NOTE_A2,133},{NOTE_G3,133},{NOTE_A2,133},{NOTE_A2,133},{NOTE_F3,133},{NOTE_A2,133},{NOTE_A2,133},{NOTE_DS3,133},{NOTE_A2,133},{NOTE_A2,133},{NOTE_E3,133},{NOTE_F3,133},{NOTE_A2,133},{NOTE_A2,133},{NOTE_A3,133},{NOTE_A2,133},{NOTE_A2,133},{NOTE_G3,133},{NOTE_A2,133},{NOTE_A2,133},{NOTE_F3,133},{NOTE_A2,133},{NOTE_A2,133},{NOTE_DS3,534},{NOTE_A2,133},{NOTE_A2,133},{NOTE_A3,133},{NOTE_A2,133},{NOTE_A2,133},{NOTE_G3,133},{NOTE_A2,133},{NOTE_A2,133},{NOTE_F3,133},{NOTE_A2,133},{NOTE_A2,133},{NOTE_DS3,133},{NOTE_A2,133},{NOTE_A2,133},{NOTE_E3,133},{NOTE_F3,133},{NOTE_A2,133},{NOTE_A2,133},{NOTE_A3,133},{NOTE_A2,133},{NOTE_A2,133},{NOTE_G3,133},{NOTE_A2,133},{NOTE_A2,133},{NOTE_A3,67},{NOTE_F3,67},{NOTE_D3,67},{NOTE_A3,67},{NOTE_F3,67},{NOTE_D3,67},{NOTE_C4,67},{NOTE_A3,67},{NOTE_F3,67},{NOTE_A3,67},{NOTE_F3,67},{NOTE_D3,67},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_B2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,534},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_B2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,534},{NOTE_CS3,133},{NOTE_CS3,133},{NOTE_CS4,133},{NOTE_CS3,133},{NOTE_CS3,133},{NOTE_B3,133},{NOTE_CS3,133},{NOTE_CS3,133},{NOTE_A3,133},{NOTE_CS3,133},{NOTE_CS3,133},{NOTE_G3,133},{NOTE_CS3,133},{NOTE_CS3,133},{NOTE_GS3,133},{NOTE_A3,133},{NOTE_B2,133},{NOTE_B2,133},{NOTE_B3,133},{NOTE_B2,133},{NOTE_B2,133},{NOTE_A3,133},{NOTE_B2,133},{NOTE_B2,133},{NOTE_G3,133},{NOTE_B2,133},{NOTE_B2,133},{NOTE_F3,534},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_B2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_B3,67},{NOTE_G3,67},{NOTE_E3,67},{NOTE_G3,67},{NOTE_B3,67},{NOTE_E4,67},{NOTE_G3,67},{NOTE_B3,67},{NOTE_E4,67},{NOTE_B3,67},{NOTE_G4,67},{NOTE_B4,67},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_B2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,534},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_D3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_AS2,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_B2,133},{NOTE_C3,133},{NOTE_E2,133},{NOTE_E2,133},{NOTE_E3,133},{NOTE_E2,133},{NOTE_E2,133},{0,0}};
+
+    // Insert tones into dictionary
+    insert(playlist, "super_mario_bros", 0, super_mario_bros, sizeof(super_mario_bros) / sizeof(struct Tone));
+    insert(playlist, "hedwig_theme", 0, hedwig_theme, sizeof(hedwig_theme) / sizeof(struct Tone));
+    insert(playlist, "doom", 0, doom, sizeof(doom) / sizeof(struct Tone));
+
+    int toneCount;
+    struct Tone *melody = lookup(playlist, "super_mario_bros", 0, &toneCount);;
+
+
+}
+
 
 /* USER CODE END 0 */
 
@@ -342,6 +382,7 @@ int main(void) {
 	_digits[9].pattern = GPIO_PIN_12 | GPIO_PIN_15;
 	_digits[9].anti_pattern = GPIO_PIN_13 | GPIO_PIN_14;
 
+	//initialize Global digits structure
 	for (int i = 0; i < 10; i++) {
 		digits[i] = _digits[i];
 	}
@@ -355,6 +396,7 @@ int main(void) {
 
 	/* USER CODE BEGIN Init */
 
+	//Set 7-segment PINS
 	led[0] = GPIO_PIN_1;
 	led[1] = GPIO_PIN_2;
 	led[2] = GPIO_PIN_3;
@@ -843,7 +885,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 		blink = 0;
 		isCorrect = -1;
 		prevEnterTime = HAL_GetTick();
-		PWM_Stop();
+//		PWM_Stop();
 		buzzer_flag = NONE;
 	}
 }
@@ -894,67 +936,67 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 			}
 		}
 
-		switch (buzzer_flag) {
-		case CorrectInput:
-			if (buzzer_flag == CorrectInput) {
-				if (HAL_GetTick() - buzzerEnterTime < 50) {
-					PWM_Change_Tone(507, _volume);
-				} else {
-					PWM_Stop();
-					buzzer_flag = NONE;
-				}
-			}
-			break;
-		case WrongInput:
-			if (HAL_GetTick() - buzzerEnterTime < 1000) {
-				if (HAL_GetTick() - buzzerCoolDown < 50) {
-					PWM_Change_Tone(236, _volume);
-				} else if (HAL_GetTick() - buzzerCoolDown < 300) {
-					//coolDown
-					PWM_Change_Tone(0, 0);
-				} else
-					buzzerCoolDown = HAL_GetTick();
-			} else {
-				PWM_Stop();
-				buzzer_flag = NONE;
-			}
-			break;
-		case CorrectPass:
-			if (HAL_GetTick() - buzzerEnterTime < 1200) {
-				if (HAL_GetTick() - buzzerEnterTime < 800) {
-					if (HAL_GetTick() - buzzerCoolDown < 50) {
-						PWM_Change_Tone(1000, _volume);
-					} else if (HAL_GetTick() - buzzerCoolDown < 100) {
-						//coolDown
-						PWM_Change_Tone(0, _volume);
-					} else
-						buzzerCoolDown = HAL_GetTick();
-				} else {
-					PWM_Change_Tone(1000, _volume);
-				}
-			} else {
-				PWM_Stop();
-				buzzer_flag = NONE;
-			}
-			break;
-		case WrongPass:
-			if (HAL_GetTick() - buzzerEnterTime < 1500) {
-				if (HAL_GetTick() - buzzerCoolDown < 150) {
-					PWM_Change_Tone(700, _volume);
-				} else if (HAL_GetTick() - buzzerCoolDown < 450) {
-					//coolDown
-					PWM_Change_Tone(0, _volume);
-				} else
-					buzzerCoolDown = HAL_GetTick();
-			} else {
-				PWM_Stop();
-				buzzer_flag = NONE;
-			}
-			break;
-		case SuperWrongPass:
-			PWM_Change_Tone(1000, _volume);
-			break;
-		}
+//		switch (buzzer_flag) {
+//		case CorrectInput:
+//			if (buzzer_flag == CorrectInput) {
+//				if (HAL_GetTick() - buzzerEnterTime < 50) {
+//					PWM_Change_Tone(507, _volume);
+//				} else {
+//					PWM_Stop();
+//					buzzer_flag = NONE;
+//				}
+//			}
+//			break;
+//		case WrongInput:
+//			if (HAL_GetTick() - buzzerEnterTime < 1000) {
+//				if (HAL_GetTick() - buzzerCoolDown < 50) {
+//					PWM_Change_Tone(236, _volume);
+//				} else if (HAL_GetTick() - buzzerCoolDown < 300) {
+//					//coolDown
+//					PWM_Change_Tone(0, 0);
+//				} else
+//					buzzerCoolDown = HAL_GetTick();
+//			} else {
+//				PWM_Stop();
+//				buzzer_flag = NONE;
+//			}
+//			break;
+//		case CorrectPass:
+//			if (HAL_GetTick() - buzzerEnterTime < 1200) {
+//				if (HAL_GetTick() - buzzerEnterTime < 800) {
+//					if (HAL_GetTick() - buzzerCoolDown < 50) {
+//						PWM_Change_Tone(1000, _volume);
+//					} else if (HAL_GetTick() - buzzerCoolDown < 100) {
+//						//coolDown
+//						PWM_Change_Tone(0, _volume);
+//					} else
+//						buzzerCoolDown = HAL_GetTick();
+//				} else {
+//					PWM_Change_Tone(1000, _volume);
+//				}
+//			} else {
+//				PWM_Stop();
+//				buzzer_flag = NONE;
+//			}
+//			break;
+//		case WrongPass:
+//			if (HAL_GetTick() - buzzerEnterTime < 1500) {
+//				if (HAL_GetTick() - buzzerCoolDown < 150) {
+//					PWM_Change_Tone(700, _volume);
+//				} else if (HAL_GetTick() - buzzerCoolDown < 450) {
+//					//coolDown
+//					PWM_Change_Tone(0, _volume);
+//				} else
+//					buzzerCoolDown = HAL_GetTick();
+//			} else {
+//				PWM_Stop();
+//				buzzer_flag = NONE;
+//			}
+//			break;
+//		case SuperWrongPass:
+//			PWM_Change_Tone(1000, _volume);
+//			break;
+//		}
 	}
 }
 
