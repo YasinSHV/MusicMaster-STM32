@@ -130,7 +130,7 @@ enum BuzzerFlag {
 enum BuzzerFlag buzzer_flag = NONE;
 
 enum ProgramState{Paused, Resume, IDLE};
-enum ProgramState programState = Resume;
+enum ProgramState programState = IDLE;
 uint32_t buzzerCoolDown = 0;
 //PWM BEGIN
 //TIM_HandleTypeDef *pwm_timer = &htim2;
@@ -282,6 +282,30 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 //UART END
 
 //ADC Begin
+enum ADC_FUNCTION{CHANGE_MSUIC,CHANGE_VOLUME, NONE};
+enum ADC_FUNCTION adc_function = NONE;
+
+uint32_t normalize_adc(uint32_t adc_value, uint32_t max_adc_value, uint32_t playlist_size) {
+	switch(adc_function){
+	case CHANGE_MSUIC:
+			// Calculate the step size
+			float step = (float)max_adc_value / (playlist_size - 1);
+			// Calculate the normalized music number
+			uint32_t normalized_number = (uint32_t)((float)adc_value / step + 0.5); // Adding 0.5 for rounding
+			// Ensure the normalized number is at least 1
+			if (normalized_number < 1) {
+				normalized_number = 1;
+			}
+			return normalized_number;
+		break;
+	case CHANGE_VOLUME:
+		if(value > max_adc_value - 150)
+				value = 4095;
+		adc_value = (adc_value * 100) / max_adc_value;
+		return adc_value;
+		break;
+	}
+}
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 {
@@ -289,9 +313,6 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 	{
 		uint32_t value;
 		value = HAL_ADC_GetValue(hadc);
-		char str[100];
-		sprintf(str, "%lu\n",value);
-		HAL_UART_Transmit_IT(&huart1, str, strlen(str));
 	}
 }
 //ADC End
