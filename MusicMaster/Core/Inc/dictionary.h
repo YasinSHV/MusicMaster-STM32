@@ -111,7 +111,7 @@ typedef struct Dictionary Dictionary;
 
 // Function declarations
 Dictionary *initDictionary(int size);
-void insert(Dictionary *dict, const char *stringKey, int numericKey, struct Tone *tones, int numTones);
+void insert(Dictionary *dict, const char *stringKey, struct Tone *tones, int numTones);
 struct Tone *lookup(Dictionary *dict, const char *stringKey, int numericKey, int *numTones);
 void freeDictionary(Dictionary *dict);
 
