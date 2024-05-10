@@ -1,5 +1,7 @@
 # Music Player Mini Project
 
+For more information on the Dictionary Library used in this project, please refer to the [Dictionary Library Wiki Page](https://github.com/YasinSHV/MusicMaster-STM32/wiki/Dictionary-Library).
+
 ## Important Notes:
 - **Do not write any code in a while loop in the main function.**
 - UART reception must be initialized using interrupts.
