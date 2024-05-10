@@ -18,11 +18,11 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "dictionary.h"
+#include "main.h"
 #include "music_library.h"
+#include "dictionary.h"
 #include "stdlib.h"
 #include "time.h"
-
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
@@ -35,7 +35,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define DEBOUNCE_DELAY 350
+#define DEBOUNCE_DELAY 250
 #define PASSWORD_LENGTH 4
 //Use Define to set when the 7-segment is on or off
 //(to support both:{common anode, common cathode)
@@ -89,7 +89,7 @@ struct digit {
 };
 extern struct Dictionary *playlist;
 extern char **playlistOrder;
-int playedCount = 0, tonesCount = 0;
+int playedCount = 0, currentMusic = 0, adc_select = 0;
 
 extern volatile uint16_t volume;
 struct Tone *melody;
@@ -136,7 +136,7 @@ enum ProgramState programState = Resume;
 enum ProgramMode {
 	Shuffle, Liner
 };
-enum ProgramMode programMode = Liner;
+enum ProgramMode programMode = Shuffle;
 uint32_t buzzerCoolDown = 0;
 //PWM BEGIN
 //TIM_HandleTypeDef *pwm_timer = &htim2;
@@ -172,35 +172,30 @@ uint32_t buzzerCoolDown = 0;
 
 //UART BEGIN
 
+//Function to extract music number from Set_Music()
 void extractNumber(const uint8_t *data) {
-//	isCorrect = -1;
-//	// Extract the first four characters and convert them to integers
-//	char pass[19] = "PASS_CHANGED(XXXX)\n";
-//	pass[13] = data[9];
-//	pass[14] = data[10];
-//	pass[15] = data[11];
-//	pass[16] = data[12];
-//
-//	for (int i = 9; i < 13; i++) {
-//		if (data[i] <= '9' && data[i] >= '0') {
-//			password[i - 9] = data[i] - '0';
-//		} else {
-//			if (logStatus) {
-//				HAL_UART_Transmit_IT(&huart1, "ERROR(INCORRECT FORMAT)\n", 24);
-//			}
-//			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, 0);
-//			buzzerEnterTime = HAL_GetTick();
-//			if (alertStatus)
-//				PWM_Start();
-//			return;
-//		}
-//	}
-//	if (logStatus) {
-//		HAL_UART_Transmit_IT(&huart1, pass, 19);
-//		buzzerEnterTime = HAL_GetTick();
-//		if (alertStatus)
-//			PWM_Start();
-//	}
+	int helper[digit_count(getDictSize(playlist))];
+	int flag = 0;
+	if (data[10 + digit_count(getDictSize(playlist))] == ')'
+			&& (data[10] != '0')) {
+		for (int i = 10; i < 10 + digit_count(getDictSize(playlist)); i++) {
+			if (data[i] <= '9' && data[i] >= '0') {
+				helper[i - 10] = data[i] - '0';
+			} else {
+				flag = 1;
+				break;
+			}
+		}
+		if (!flag) {
+			int num = array_to_number(helper, digit_count(getDictSize(playlist)));
+			if(num <= getDictSize(playlist))
+			{
+				set_music(num);
+				return;
+			}
+		}
+	}
+//failed
 }
 
 int compareStrings(const char *str1, const uint8_t *str2, int n) {
@@ -212,9 +207,9 @@ int compareStrings(const char *str1, const uint8_t *str2, int n) {
 	return 1;
 }
 
-char setPass[9] = "SET_PASS(";
-char logON[6] = "LOG_ON";
-char logOFF[7] = "LOG_OFF";
+char pause[5] = "pause";
+char resume[6] = "resume";
+char setMusic[10] = "set_music(";
 char alertON[8] = "ALERT_ON";
 char alertOFF[9] = "ALERT_OFF";
 char setVolume[11] = "SET_VOLUME(";
@@ -228,23 +223,18 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 		HAL_UART_Receive_IT(&huart1, &d, 1);
 		data[i++] = d;
 		if (d == '\n') {
-			if ((i == 15 && compareStrings(setPass, data, 9) == 1)
-					&& isCorrect == -1) {
-				HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, 1);
-				HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, 0);
+			if ((i == 6 && compareStrings(pause, data, 5) == 1)) {
+				programState = Paused;
+				HAL_UART_Transmit_IT(&huart1, "-=MUSIC PAUSED=-\r", 17);
+			} else if (i == 7 && compareStrings(resume, data, 6) == 1) {
+
+				programState = Resume;
+				HAL_UART_Transmit_IT(&huart1, "-=MUSIC RESUME=-\n", 17);
+
+			} else if (i == 12 + digit_count(getDictSize(playlist))
+					&& compareStrings(setMusic, data, 10) == 1) {
 				extractNumber(data);
-			} else if (i == 7) {
-				if (compareStrings(logON, data, 6) == 1) {
-					logStatus = 1;
-					HAL_UART_Transmit_IT(&huart1, "Program Log Turned ON\n",
-							22);
-				}
-			} else if (i == 8) {
-				if (compareStrings(logOFF, data, 7) == 1) {
-					logStatus = 0;
-					HAL_UART_Transmit_IT(&huart1, "Program Log Turned OFF\n",
-							23);
-				}
+
 			} else if (i == 9) {
 				if (compareStrings(alertON, data, 8) == 1) {
 					alertStatus = 1;
@@ -281,6 +271,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 
 	}
 }
+
 //UART END
 
 //ADC Begin
@@ -290,29 +281,49 @@ enum ADC_FUNCTION {
 enum ADC_FUNCTION adc_function = NONE;
 
 uint32_t normalize_adc(uint32_t adc_value, uint32_t max_adc_value,
-		uint32_t playlist_size, int adc_function) {
+		uint32_t playlist_size) {
 	if (adc_function == CHANGE_MUSIC) {
 		// Calculate the step size
-		float step = (float) max_adc_value / (playlist_size - 1);
+		float step = (float) max_adc_value / (playlist_size);
 		// Calculate the normalized music number
 		uint32_t normalized_number = (uint32_t) ((float) adc_value / step + 0.5); // Adding 0.5 for rounding
 		// Ensure the normalized number is at least 1
 		if (normalized_number < 1) {
 			normalized_number = 1;
 		}
+		adc_select = normalized_number;
 		return normalized_number;
 	} else if (adc_function == CHANGE_VOLUME) {
-		if (adc_value > max_adc_value - 150)
-			adc_value = 4095;
-		adc_value = (adc_value * 100) / max_adc_value;
+		adc_value = (adc_value * 101) / max_adc_value;
+		if (adc_value > 97)
+			adc_value = 100;
+		volume = adc_value;
 		return adc_value;
 	}
+}
+
+int adc_indx = 0;
+uint32_t adc_values[50];
+int denoise_adc() {
+	int sum = 0;
+	for (int i = 0; i < 50; i++) {
+		sum += adc_values[i];
+	}
+	return sum / 50;
 }
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
 	if (hadc->Instance == ADC1) {
 		uint32_t value;
 		value = HAL_ADC_GetValue(hadc);
+		if (adc_indx < 50)
+			adc_values[adc_indx++] = value;
+		else {
+			adc_indx = 0;
+			value = denoise_adc();
+			extract_int_to_carrier(
+					normalize_adc(value, 4095, getDictSize(playlist)));
+		}
 	}
 }
 //ADC End
@@ -335,31 +346,81 @@ void increase(int _head) {
 }
 
 void init_display() {
+//Reset All Segment Values
+	HAL_GPIO_WritePin(GPIOD,
+	GPIO_PIN_13 | GPIO_PIN_14 | GPIO_PIN_15 | GPIO_PIN_12, GPIO_PIN_SET);
 	HAL_GPIO_WritePin(GPIOD,
 	GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4, GPIO_PIN_SET);
 }
 
+//Carrier is to be displayed on seven segment
+int musicNumberSize = 0;
+int digit_count(int val) {
+	int i, size = 0;
+	int temp = val;
+
+	while (temp > 0) {
+		temp /= 10;
+		size++;
+	}
+	return size;
+}
+
+void extract_int_to_carrier(int val) {
+	int i;
+	i = digit_count(val) - 1;
+	musicNumberSize = digit_count(val);
+
+	while (val > 0) {
+		carrier[i--] = val % 10;
+		val /= 10;
+	}
+}
+
+int array_to_number(int *array, int size) {
+	int number = 0;
+	for (int i = 0; i < size; i++) {
+		number = number * 10 + array[i];
+	}
+	return number;
+}
+
 int generate_random_int() {
-	random_number = rand() % getDictSize(playlist);
+	return random_number = rand() % getDictSize(playlist);
+}
+
+void change_program_mode() {
+	if (programMode == Shuffle) {
+		//To resume after last shuffle music
+		playedCount = currentMusic - 1;
+		programMode = Liner;
+	} else {
+		programMode = Shuffle;
+	}
 }
 
 int next_shuffle() {
-	struct DictionaryNode *node;
+	struct DictionaryNode *node = NULL;
 	int toneCount = 0;
 	srand(HAL_GetTick());
 	int i = generate_random_int();
 	melody = lookup(playlist, playlistOrder[i], &toneCount, &node);
 
-	while (isBlacklisted(node)) {
+	while (node && isBlacklisted(node)) {
 		i = generate_random_int();
 		melody = lookup(playlist, playlistOrder[i], &toneCount, &node);
 	}
-	setBlacklisted(node);
-	playedCount++;
+	currentMusic = i + 1;
+	if (node) {
+		setBlacklisted(node);
+		playedCount++;
+	}
+
 	return toneCount;
 }
 
-int next_music() {
+//Choose next music based on programMode
+void next_music() {
 	int toneCount;
 	struct DictionaryNode *node;
 	if (programState == Resume) {
@@ -372,6 +433,7 @@ int next_music() {
 		}
 
 		if (programMode == Liner) {
+			currentMusic = playedCount;
 			melody = lookup(playlist, playlistOrder[playedCount++], &toneCount,
 					&node);
 			Change_Melody(melody, toneCount);
@@ -379,7 +441,18 @@ int next_music() {
 			toneCount = next_shuffle();
 			Change_Melody(melody, toneCount);
 		}
+		extract_int_to_carrier(currentMusic);
 	}
+}
+
+void set_music(int num) {
+	int toneCount;
+	struct DictionaryNode *node;
+	melody = lookup(playlist, playlistOrder[num - 1], &toneCount, &node);
+	Change_Melody(melody, toneCount);
+	currentMusic = num;
+	unsetBlacklisted(node);
+	extract_int_to_carrier(currentMusic);
 }
 /* USER CODE END 0 */
 
@@ -431,7 +504,7 @@ int main(void) {
 	_digits[9].pattern = GPIO_PIN_12 | GPIO_PIN_15;
 	_digits[9].anti_pattern = GPIO_PIN_13 | GPIO_PIN_14;
 
-	//initialize Global digits structure
+//initialize Global digits structure
 	for (int i = 0; i < 10; i++) {
 		digits[i] = _digits[i];
 	}
@@ -445,7 +518,7 @@ int main(void) {
 
 	/* USER CODE BEGIN Init */
 
-	//Set 7-segment PINS
+//Set 7-segment PINS
 	led[0] = GPIO_PIN_1;
 	led[1] = GPIO_PIN_2;
 	led[2] = GPIO_PIN_3;
@@ -477,7 +550,6 @@ int main(void) {
 	initTonesDictionary();
 	PWM_Start();
 
-	HAL_ADC_Start_IT(&hadc1);
 	/* USER CODE END 2 */
 
 	/* Infinite loop */
@@ -592,7 +664,7 @@ static void MX_ADC1_Init(void) {
 	sConfig.Channel = ADC_CHANNEL_5;
 	sConfig.Rank = ADC_REGULAR_RANK_1;
 	sConfig.SingleDiff = ADC_SINGLE_ENDED;
-	sConfig.SamplingTime = ADC_SAMPLETIME_181CYCLES_5;
+	sConfig.SamplingTime = ADC_SAMPLETIME_601CYCLES_5;
 	sConfig.OffsetNumber = ADC_OFFSET_NONE;
 	sConfig.Offset = 0;
 	if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK) {
@@ -879,22 +951,22 @@ static void MX_GPIO_Init(void) {
 	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
 	HAL_GPIO_Init(CS_I2C_SPI_GPIO_Port, &GPIO_InitStruct);
 
-	/*Configure GPIO pins : MEMS_INT3_Pin MEMS_INT4_Pin */
-	GPIO_InitStruct.Pin = MEMS_INT3_Pin | MEMS_INT4_Pin;
+	/*Configure GPIO pin : MEMS_INT4_Pin */
+	GPIO_InitStruct.Pin = MEMS_INT4_Pin;
 	GPIO_InitStruct.Mode = GPIO_MODE_EVT_RISING;
 	GPIO_InitStruct.Pull = GPIO_NOPULL;
-	HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
+	HAL_GPIO_Init(MEMS_INT4_GPIO_Port, &GPIO_InitStruct);
 
-	/*Configure GPIO pins : PA0 PA2 */
-	GPIO_InitStruct.Pin = GPIO_PIN_0 | GPIO_PIN_2;
+	/*Configure GPIO pin : PA0 */
+	GPIO_InitStruct.Pin = GPIO_PIN_0;
 	GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
 	GPIO_InitStruct.Pull = GPIO_NOPULL;
 	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-	/*Configure GPIO pins : PA1 PA3 */
-	GPIO_InitStruct.Pin = GPIO_PIN_1 | GPIO_PIN_3;
+	/*Configure GPIO pins : PA1 PA2 PA3 PA4 */
+	GPIO_InitStruct.Pin = GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4;
 	GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
-	GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+	GPIO_InitStruct.Pull = GPIO_PULLUP;
 	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
 	/*Configure GPIO pins : PD12 PD13 PD14 PD15
@@ -919,6 +991,9 @@ static void MX_GPIO_Init(void) {
 	HAL_NVIC_SetPriority(EXTI3_IRQn, 0, 0);
 	HAL_NVIC_EnableIRQ(EXTI3_IRQn);
 
+	HAL_NVIC_SetPriority(EXTI4_IRQn, 0, 0);
+	HAL_NVIC_EnableIRQ(EXTI4_IRQn);
+
 }
 
 /* USER CODE BEGIN 4 */
@@ -933,6 +1008,20 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 			next_music();
 			previousMillis = currentMillis;
 		}
+	} else if ((GPIO_Pin == GPIO_PIN_2)) {
+		if (!HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_2)) {
+			if ((currentMillis - previousMillis > DEBOUNCE_DELAY
+					&& adc_function != CHANGE_MUSIC)) {
+				// Rising edge of button 2
+				adc_function = CHANGE_VOLUME;
+				HAL_ADC_Start_IT(&hadc1);
+				previousMillis = currentMillis;
+			}
+		} else {
+			adc_function = NONE;
+			HAL_ADC_Stop_IT(&hadc1);
+			extract_int_to_carrier(currentMusic);
+		}
 	} else if ((GPIO_Pin == GPIO_PIN_3)) {
 
 		if ((currentMillis - previousMillis > DEBOUNCE_DELAY)) {
@@ -942,7 +1031,20 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 				programState = Paused;
 			previousMillis = currentMillis;
 		}
-
+	} else if ((GPIO_Pin == GPIO_PIN_4)) {
+		if (!HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_4)) {
+			if ((currentMillis - previousMillis > DEBOUNCE_DELAY
+					&& adc_function != CHANGE_VOLUME)) {
+				// Rising edge of button 2
+				adc_function = CHANGE_MUSIC;
+				HAL_ADC_Start_IT(&hadc1);
+				previousMillis = currentMillis;
+			}
+		} else {
+			adc_function = NONE;
+			HAL_ADC_Stop_IT(&hadc1);
+			set_music(adc_select);
+		}
 	} else if (GPIO_Pin == GPIO_PIN_0 && isCorrect == 0) {
 		blink = 0;
 		isCorrect = -1;
@@ -953,15 +1055,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 	if (htim->Instance == TIM1) {
-		if (index == LED && HAL_GetTick() - prevTime < 400) {
-			display_number(index, carrier[index]);
-			coolDownTimer = HAL_GetTick();
-		} else if (index == LED && HAL_GetTick() - prevTime > 900) {
-			//coolDown
-			if (HAL_GetTick() - coolDownTimer > 100) {
-				prevTime = HAL_GetTick();
-			}
-		} else if (index != LED) {
+		if (index < musicNumberSize) {
 			display_number(index, carrier[index]);
 		}
 		if (index == 4) {
