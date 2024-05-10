@@ -99,6 +99,9 @@ void Update_Melody() {
 			PWM_Change_Tone(active_tone.frequency, volume);
 			current_tone_end = HAL_GetTick() + active_tone.duration;
 			current_tone_number++;
+		}else if(current_tone_number >= melody_tone_count)
+		{
+			next_music();
 		}
 	}
 }

@@ -1,6 +1,9 @@
 ../Core/Src/dictionary.c:29:14:hashString	24	static
-../Core/Src/dictionary.c:38:14:hashNumeric	16	static
-../Core/Src/dictionary.c:43:13:initDictionary	24	static
-../Core/Src/dictionary.c:54:6:insert	32	static
-../Core/Src/dictionary.c:74:14:lookup	32	static
-../Core/Src/dictionary.c:105:6:freeDictionary	32	static
+../Core/Src/dictionary.c:38:13:initDictionary	24	static
+../Core/Src/dictionary.c:49:6:insert	32	static
+../Core/Src/dictionary.c:68:14:lookup	32	static
+../Core/Src/dictionary.c:91:5:getDictSize	16	static
+../Core/Src/dictionary.c:96:6:setBlacklisted	16	static
+../Core/Src/dictionary.c:101:6:unsetBlacklisted	16	static
+../Core/Src/dictionary.c:106:5:isBlacklisted	16	static
+../Core/Src/dictionary.c:112:6:freeDictionary	32	static
