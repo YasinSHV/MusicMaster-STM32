@@ -13,6 +13,7 @@
 // Define your dictionary node
 struct DictionaryNode {
     char *stringKey;
+    int numericKey;
     struct Tone *tones;
     int numTones;
     struct DictionaryNode *next;
@@ -34,6 +35,9 @@ unsigned int hashString(const char *key, int size) {
 }
 
 // Hash function for numeric keys
+unsigned int hashNumeric(int key, int size) {
+    return key % size;
+}
 
 // Initialize dictionary
 Dictionary *initDictionary(int size) {
@@ -47,16 +51,19 @@ Dictionary *initDictionary(int size) {
 }
 
 // Insert key-value pair into dictionary
-void insert(Dictionary *dict, const char *stringKey, struct Tone *tones, int numTones) {
+void insert(Dictionary *dict, const char *stringKey, int numericKey, struct Tone *tones, int numTones) {
     unsigned int index;
     struct DictionaryNode *newNode = malloc(sizeof(struct DictionaryNode));
     newNode->stringKey = strdup(stringKey);
+    newNode->numericKey = numericKey;
     newNode->tones = malloc(numTones * sizeof(struct Tone));
     memcpy(newNode->tones, tones, numTones * sizeof(struct Tone));
     newNode->numTones = numTones;
 
     if (stringKey != NULL) {
         index = hashString(stringKey, dict->size);
+    } else {
+        index = hashNumeric(numericKey, dict->size);
     }
 
     newNode->next = dict->buckets[index];
@@ -78,17 +85,20 @@ struct Tone *lookup(Dictionary *dict, const char *stringKey, int numericKey, int
             }
             current = current->next;
         }
+    } else {
+        index = hashNumeric(numericKey, dict->size);
+        current = dict->buckets[index];
+        while (current) {
+            if (current->numericKey == numericKey) {
+                *numTones = current->numTones;
+                return current->tones;
+            }
+            current = current->next;
+        }
     }
 
     *numTones = 0;
     return NULL;
-}
-
-struct DictionaryNode* lookupindex(Dictionary *dict, unsigned int i)
-{
-    struct DictionaryNode *current;
-    current = dict->buckets[i];
-    return current;
 }
 
 // Free dictionary memory
