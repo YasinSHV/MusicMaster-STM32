@@ -90,6 +90,7 @@ struct digit {
 extern struct Dictionary *playlist;
 extern char **playlistOrder;
 int playedCount = 0, currentMusic = 0, adc_select = 0;
+int index = 0;
 
 extern volatile uint16_t volume;
 struct Tone *melody;
@@ -97,35 +98,11 @@ struct Tone *melody;
 uint16_t led[4];
 
 int carrier[] = { 0, 0, 0, 0 };
-
-int number = 0;
 int random_number;
 
-char logCorrect[19] = "LOG(XXXX, CORRECT)\n";
-char logFailed[18] = "LOG(XXXX, FAILED)\n";
-
-int logStatus = 1;
-int alertStatus = 1;
-
-int displayed_number[4];
-
+uint32_t timePassed;
 uint32_t previousMillis = 0;
 uint32_t currentMillis = 0;
-uint32_t prevTime = 0;
-uint32_t coolDownTimer = 0;
-
-int isCorrect = -1;
-int nextTurn = 0;
-int blink = 1;
-int index = 0;
-
-uint32_t prevEnterTime = 0;
-
-uint32_t buzzerEnterTime = 0;
-
-uint32_t s = 0, e = 0;
-
-int LED = 0, counter = 0;
 
 struct digit digits[10];
 
@@ -133,45 +110,13 @@ enum ProgramState {
 	Paused, Resume, IDLE
 };
 enum ProgramState programState = Resume;
+
 enum ProgramMode {
 	Shuffle, Liner
 };
 enum ProgramMode programMode = Shuffle;
-uint32_t buzzerCoolDown = 0;
-//PWM BEGIN
-//TIM_HandleTypeDef *pwm_timer = &htim2;
-//uint32_t pwm_channel = TIM_CHANNEL_1;
-//uint16_t _volume = 10;
-//
-////void PWM_Start() {
-////	HAL_TIM_PWM_Start(pwm_timer, pwm_channel);
-////}
-////void PWM_Stop() {
-////	HAL_TIM_PWM_Stop(pwm_timer, pwm_channel);
-////}
-////
-////void PWM_Change_Tone(uint16_t pwm_freq, uint16_t volume) //(1-20000), (0-1000)
-////{
-////	if (pwm_freq == 0 || pwm_freq > 20000)
-////		__HAL_TIM_SET_COMPARE(pwm_timer, pwm_channel, 0);
-////	else {
-////		const uint32_t internal_clock_freq = HAL_RCC_GetSysClockFreq();
-////
-////		const uint16_t prescaler = 1 + internal_clock_freq / pwm_freq / 60000;
-////		const uint32_t timer_clock = internal_clock_freq / prescaler;
-////		const uint32_t period_cycles = timer_clock / pwm_freq;
-////		const uint32_t puls_width = volume * period_cycles / 1000 / 2;
-////
-////		pwm_timer->Instance->PSC = prescaler - 1;
-////		pwm_timer->Instance->ARR = period_cycles - 1;
-////		pwm_timer->Instance->EGR = TIM_EGR_UG;
-////		__HAL_TIM_SET_COMPARE(pwm_timer, pwm_channel, puls_width);
-////	}
-////}
-//PWM END
 
 //UART BEGIN
-
 //Function to extract music number from Set_Music()
 void extractNumber(const uint8_t *data) {
 	int helper[digit_count(getDictSize(playlist))];
@@ -187,14 +132,15 @@ void extractNumber(const uint8_t *data) {
 			}
 		}
 		if (!flag) {
-			int num = array_to_number(helper, digit_count(getDictSize(playlist)));
-			if(num <= getDictSize(playlist))
-			{
+			int num = array_to_number(helper,
+					digit_count(getDictSize(playlist)));
+			if (num <= getDictSize(playlist)) {
 				set_music(num);
 				return;
 			}
 		}
 	}
+	HAL_UART_Transmit_IT(&huart1, "[ERROR][Music not found][XX:XX]", 17);
 //failed
 }
 
@@ -210,9 +156,6 @@ int compareStrings(const char *str1, const uint8_t *str2, int n) {
 char pause[5] = "pause";
 char resume[6] = "resume";
 char setMusic[10] = "set_music(";
-char alertON[8] = "ALERT_ON";
-char alertOFF[9] = "ALERT_OFF";
-char setVolume[11] = "SET_VOLUME(";
 
 uint8_t data[100];
 uint8_t d;
@@ -235,35 +178,8 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 					&& compareStrings(setMusic, data, 10) == 1) {
 				extractNumber(data);
 
-			} else if (i == 9) {
-				if (compareStrings(alertON, data, 8) == 1) {
-					alertStatus = 1;
-					HAL_UART_Transmit_IT(&huart1, "Program Alerts Turned ON\n",
-							25);
-					buzzerEnterTime = HAL_GetTick();
-					PWM_Start();
-				}
-			} else if (i == 10) {
-				if (compareStrings(alertOFF, data, 9) == 1) {
-					alertStatus = 0;
-					HAL_UART_Transmit_IT(&huart1, "Program Alerts Turned OFF\n",
-							26);
-				}
-			} else if (i == 14 && (data[11] - '0') < 6
-					&& (data[11] - '0') > -1) {
-				if (compareStrings(setVolume, data, 11) == 1
-						&& data[12] == ')') {
-					int v = data[11] - '0';
-//					_volume = v * 10;
-					char massage[24] = "Program Volume Set To  \n";
-					massage[22] = data[11];
-					HAL_UART_Transmit_IT(&huart1, massage, 24);
-				}
 			} else {
 				HAL_UART_Transmit_IT(&huart1, "INVALID INPUT\n", 14);
-				buzzerEnterTime = HAL_GetTick();
-				if (alertStatus)
-					PWM_Start();
 			}
 
 			i = 0;
@@ -338,13 +254,6 @@ void display_number(int led_flag, int _number) {
 	HAL_GPIO_WritePin(GPIOD, digits[_number].anti_pattern, GPIO_PIN_RESET);
 }
 
-void increase(int _head) {
-	carrier[_head] += 1;
-	if (carrier[_head] == 10) {
-		carrier[_head] = 0;
-	}
-}
-
 void init_display() {
 //Reset All Segment Values
 	HAL_GPIO_WritePin(GPIOD,
@@ -383,6 +292,19 @@ int array_to_number(int *array, int size) {
 		number = number * 10 + array[i];
 	}
 	return number;
+}
+
+//Time since program start
+void get_time() {
+	// Convert milliseconds to seconds
+	uint32_t seconds = timePassed / 1000;
+	// Calculate minutes
+	uint32_t minutes = seconds / 60;
+
+	char min_str[3], sec_str[3];
+	snprintf(min_str, sizeof(min_str), "%02d", minutes % 60);
+	snprintf(sec_str, sizeof(sec_str), "%02d", seconds % 60);
+
 }
 
 int generate_random_int() {
@@ -445,6 +367,7 @@ void next_music() {
 	}
 }
 
+//Set music directly
 void set_music(int num) {
 	int toneCount;
 	struct DictionaryNode *node;
@@ -1000,12 +923,12 @@ static void MX_GPIO_Init(void) {
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 	currentMillis = HAL_GetTick();
-	if ((GPIO_Pin == GPIO_PIN_1) && LED != 4) {
+	if ((GPIO_Pin == GPIO_PIN_1)) {
 
 		if ((currentMillis - previousMillis > DEBOUNCE_DELAY)) {
 //			counterInside++;
-			increase(LED);
 			next_music();
+			get_time();
 			previousMillis = currentMillis;
 		}
 	} else if ((GPIO_Pin == GPIO_PIN_2)) {
@@ -1045,16 +968,13 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 			HAL_ADC_Stop_IT(&hadc1);
 			set_music(adc_select);
 		}
-	} else if (GPIO_Pin == GPIO_PIN_0 && isCorrect == 0) {
-		blink = 0;
-		isCorrect = -1;
-		prevEnterTime = HAL_GetTick();
-//		PWM_Stop();
+	} else if (GPIO_Pin == GPIO_PIN_0) {
 	}
 }
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 	if (htim->Instance == TIM1) {
+		timePassed = HAL_GetTick();
 		if (index < musicNumberSize) {
 			display_number(index, carrier[index]);
 		}
