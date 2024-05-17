@@ -18,14 +18,13 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "main.h"
+
+/* Private includes ----------------------------------------------------------*/
+/* USER CODE BEGIN Includes */
 #include "music_library.h"
 #include "dictionary.h"
 #include "stdlib.h"
 #include "time.h"
-/* Private includes ----------------------------------------------------------*/
-/* USER CODE BEGIN Includes */
-
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -35,8 +34,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define DEBOUNCE_DELAY 250
-#define PASSWORD_LENGTH 4
+#define DEBOUNCE_DELAY 350
 //Use Define to set when the 7-segment is on or off
 //(to support both:{common anode, common cathode)
 #define DISPLAY_ON GPIO_PIN_RESET
@@ -109,14 +107,70 @@ struct digit digits[10];
 enum ProgramState {
 	Paused, Resume, IDLE
 };
-enum ProgramState programState = Resume;
+enum ProgramState programState = Paused;
 
 enum ProgramMode {
 	Shuffle, Liner
 };
-enum ProgramMode programMode = Shuffle;
+enum ProgramMode programMode = Liner;
 
 //UART BEGIN
+//Time since program start
+char* get_current_time() {
+	static char time_str[6];
+
+	// Convert milliseconds to seconds
+	uint32_t seconds = timePassed / 1000;
+	// Calculate minutes
+	uint32_t minutes = seconds / 60;
+
+	snprintf(time_str, sizeof(time_str), "%02d:%02d", minutes % 60,
+			seconds % 60);
+
+	return time_str;
+}
+void sendInfo(char *message, int *helper, int num, int number_size) {
+	if (number_size == 0)
+		number_size = 1;
+
+	int message_len = strlen(message);
+	message[message_len++] = ' ';
+	for (int i = 0; i < number_size; i++) {
+		message[message_len++] = helper[i] + '0';
+	}
+	message[message_len++] = ']';
+	message[message_len++] = '[';
+	message[message_len] = '\0';
+	char *time_str = get_current_time();
+	for (int i = 0; i < 5; i++) {
+		message[message_len++] = time_str[i];
+	}
+	message[message_len++] = ']';
+	message[message_len++] = '\n';
+	message[message_len] = '\0';
+
+	HAL_UART_Transmit(&huart1, message, message_len, 100);
+}
+
+void sendError(int changeMusic) {
+	char error_message[34];
+	char *time_str = get_current_time();
+
+	if (changeMusic) {
+		strcpy(error_message, "[ERROR] [Music not found][     ]\n");
+		for (int i = 0; i < 5; i++) {
+			error_message[strlen(error_message) - 7 + i] = time_str[i];
+		}
+		HAL_UART_Transmit_IT(&huart1, error_message, 33);
+	} else {
+		strcpy(error_message, "[ERROR] [Volume not Valid][     ]\n");
+		for (int i = 0; i < 5; i++) {
+			error_message[strlen(error_message) - 7 + i] = time_str[i];
+		}
+		HAL_UART_Transmit_IT(&huart1, error_message, 34);
+	}
+}
+
 //Function to extract music number from Set_Music()
 void extractNumber(const uint8_t *data) {
 	int helper[digit_count(getDictSize(playlist))];
@@ -136,11 +190,38 @@ void extractNumber(const uint8_t *data) {
 					digit_count(getDictSize(playlist)));
 			if (num <= getDictSize(playlist)) {
 				set_music(num);
+				char message[100] = "[INFO][Music changed to ";
+				sendInfo(message, helper, num, digit_count(num));
 				return;
 			}
 		}
 	}
-	HAL_UART_Transmit_IT(&huart1, "[ERROR][Music not found][XX:XX]", 17);
+	sendError(1);
+//failed
+}
+
+void extractVolume(const uint8_t *data) {
+	int helper[strlen(data) - 13];
+	int flag = 0;
+	for (int i = 11; i < strlen(data) - 2; i++) {
+		if (data[i] <= '9' && data[i] >= '0') {
+			helper[i - 11] = data[i] - '0';
+		} else {
+			flag = 1;
+			break;
+		}
+	}
+	if (!flag) {
+		int num = array_to_number(helper, strlen(data) - 13);
+
+		if (num < 101 && num > -1) {
+			volume = num;
+			char message[100] = "[INFO][Volume changed to ";
+			sendInfo(message, helper, num, digit_count(num));
+			return;
+		}
+	}
+	sendError(0);
 //failed
 }
 
@@ -156,6 +237,10 @@ int compareStrings(const char *str1, const uint8_t *str2, int n) {
 char pause[5] = "pause";
 char resume[6] = "resume";
 char setMusic[10] = "set_music(";
+char setVolume[11] = "set_volume(";
+
+char setShuffle[18] = "play_mode(shuffle)";
+char setLiner[18] = "play_mode(ordered)";
 
 uint8_t data[100];
 uint8_t d;
@@ -166,6 +251,8 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 		HAL_UART_Receive_IT(&huart1, &d, 1);
 		data[i++] = d;
 		if (d == '\n') {
+			data[i] = '\0';
+			int len = strlen(data);
 			if ((i == 6 && compareStrings(pause, data, 5) == 1)) {
 				programState = Paused;
 				HAL_UART_Transmit_IT(&huart1, "-=MUSIC PAUSED=-\r", 17);
@@ -178,6 +265,35 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 					&& compareStrings(setMusic, data, 10) == 1) {
 				extractNumber(data);
 
+			} else if (((i > 13 && i < 17) && data[len - 2] == ')')
+					&& compareStrings(setShuffle, data, 19) == 1) {
+				extractVolume(data);
+			} else if ((i == 19) && compareStrings(setShuffle, data, 18) == 1) {
+				char message[100] = "[INFO][Play mode changed to Shuffle][";
+				int message_len = strlen(message);
+				char *time_str = get_current_time();
+				for (int i = 0; i < 5; i++) {
+					message[message_len++] = time_str[i];
+				}
+				message[message_len++] = ']';
+				message[message_len++] = '\n';
+				message[message_len] = '\0';
+
+				HAL_UART_Transmit(&huart1, message, message_len, 100);
+				programMode = Shuffle;
+			} else if ((i == 19) && compareStrings(setLiner, data, 18) == 1) {
+				char message[100] = "[INFO][Play mode changed to Ordered][";
+				int message_len = strlen(message);
+				char *time_str = get_current_time();
+				for (int i = 0; i < 5; i++) {
+					message[message_len++] = time_str[i];
+				}
+				message[message_len++] = ']';
+				message[message_len++] = '\n';
+				message[message_len] = '\0';
+
+				HAL_UART_Transmit(&huart1, message, message_len, 100);
+				programMode = Liner;
 			} else {
 				HAL_UART_Transmit_IT(&huart1, "INVALID INPUT\n", 14);
 			}
@@ -210,29 +326,36 @@ uint32_t normalize_adc(uint32_t adc_value, uint32_t max_adc_value,
 		adc_select = normalized_number;
 		return normalized_number;
 	} else if (adc_function == CHANGE_VOLUME) {
-		adc_value = (adc_value * 101) / max_adc_value;
-		if (adc_value > 97)
-			adc_value = 100;
-		volume = adc_value;
-		return adc_value;
+		adc_value = (adc_value * 100U) / (max_adc_value - 1);
+		if (adc_value > 95) {
+			adc_value = 101;
+		}
+		if (adc_value <= 1)
+			adc_value = 1;
+		adc_select = adc_value - 1;
+		adc_value -= 1;
+		if (adc_value <= 0)
+			adc_value = 0;
+		return adc_value - 1;
 	}
+
 }
 
 int adc_indx = 0;
-uint32_t adc_values[50];
+uint32_t adc_values[10];
 int denoise_adc() {
 	int sum = 0;
-	for (int i = 0; i < 50; i++) {
+	for (int i = 0; i < 10; i++) {
 		sum += adc_values[i];
 	}
-	return sum / 50;
+	return sum / 10;
 }
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
 	if (hadc->Instance == ADC1) {
 		uint32_t value;
 		value = HAL_ADC_GetValue(hadc);
-		if (adc_indx < 50)
+		if (adc_indx < 10)
 			adc_values[adc_indx++] = value;
 		else {
 			adc_indx = 0;
@@ -254,6 +377,7 @@ void display_number(int led_flag, int _number) {
 	HAL_GPIO_WritePin(GPIOD, digits[_number].anti_pattern, GPIO_PIN_RESET);
 }
 
+//test removing
 void init_display() {
 //Reset All Segment Values
 	HAL_GPIO_WritePin(GPIOD,
@@ -265,6 +389,8 @@ void init_display() {
 //Carrier is to be displayed on seven segment
 int musicNumberSize = 0;
 int digit_count(int val) {
+	if (val == 0)
+		return 1;
 	int i, size = 0;
 	int temp = val;
 
@@ -294,17 +420,23 @@ int array_to_number(int *array, int size) {
 	return number;
 }
 
-//Time since program start
-void get_time() {
-	// Convert milliseconds to seconds
-	uint32_t seconds = timePassed / 1000;
-	// Calculate minutes
-	uint32_t minutes = seconds / 60;
+int* number_to_array(int num) {
+	if (num == 0) {
+		int arr[1] = { 0 };
+		return arr;
+	}
 
-	char min_str[3], sec_str[3];
-	snprintf(min_str, sizeof(min_str), "%02d", minutes % 60);
-	snprintf(sec_str, sizeof(sec_str), "%02d", seconds % 60);
+	int *arr = (int*) malloc(digit_count(num) * sizeof(int));
 
+	int temp = num;
+	int i = digit_count(num) - 1;
+
+	while (temp != 0) {
+		arr[i--] = temp % 10;
+		temp /= 10;
+	}
+
+	return arr;
 }
 
 int generate_random_int() {
@@ -314,7 +446,7 @@ int generate_random_int() {
 void change_program_mode() {
 	if (programMode == Shuffle) {
 		//To resume after last shuffle music
-		playedCount = currentMusic - 1;
+		playedCount = currentMusic;
 		programMode = Liner;
 	} else {
 		programMode = Shuffle;
@@ -355,7 +487,7 @@ void next_music() {
 		}
 
 		if (programMode == Liner) {
-			currentMusic = playedCount;
+			currentMusic = playedCount + 1;
 			melody = lookup(playlist, playlistOrder[playedCount++], &toneCount,
 					&node);
 			Change_Melody(melody, toneCount);
@@ -374,6 +506,7 @@ void set_music(int num) {
 	melody = lookup(playlist, playlistOrder[num - 1], &toneCount, &node);
 	Change_Melody(melody, toneCount);
 	currentMusic = num;
+	playedCount = num - 1;
 	unsetBlacklisted(node);
 	extract_int_to_carrier(currentMusic);
 }
@@ -587,7 +720,7 @@ static void MX_ADC1_Init(void) {
 	sConfig.Channel = ADC_CHANNEL_5;
 	sConfig.Rank = ADC_REGULAR_RANK_1;
 	sConfig.SingleDiff = ADC_SINGLE_ENDED;
-	sConfig.SamplingTime = ADC_SAMPLETIME_601CYCLES_5;
+	sConfig.SamplingTime = ADC_SAMPLETIME_181CYCLES_5;
 	sConfig.OffsetNumber = ADC_OFFSET_NONE;
 	sConfig.Offset = 0;
 	if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK) {
@@ -902,19 +1035,19 @@ static void MX_GPIO_Init(void) {
 	HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
 	/* EXTI interrupt init*/
-	HAL_NVIC_SetPriority(EXTI0_IRQn, 0, 0);
+	HAL_NVIC_SetPriority(EXTI0_IRQn, 0, 1);
 	HAL_NVIC_EnableIRQ(EXTI0_IRQn);
 
-	HAL_NVIC_SetPriority(EXTI1_IRQn, 0, 0);
+	HAL_NVIC_SetPriority(EXTI1_IRQn, 0, 1);
 	HAL_NVIC_EnableIRQ(EXTI1_IRQn);
 
-	HAL_NVIC_SetPriority(EXTI2_TSC_IRQn, 0, 0);
+	HAL_NVIC_SetPriority(EXTI2_TSC_IRQn, 0, 1);
 	HAL_NVIC_EnableIRQ(EXTI2_TSC_IRQn);
 
-	HAL_NVIC_SetPriority(EXTI3_IRQn, 0, 0);
+	HAL_NVIC_SetPriority(EXTI3_IRQn, 0, 1);
 	HAL_NVIC_EnableIRQ(EXTI3_IRQn);
 
-	HAL_NVIC_SetPriority(EXTI4_IRQn, 0, 0);
+	HAL_NVIC_SetPriority(EXTI4_IRQn, 0, 1);
 	HAL_NVIC_EnableIRQ(EXTI4_IRQn);
 
 }
@@ -928,23 +1061,28 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 		if ((currentMillis - previousMillis > DEBOUNCE_DELAY)) {
 //			counterInside++;
 			next_music();
-			get_time();
 			previousMillis = currentMillis;
 		}
-	} else if ((GPIO_Pin == GPIO_PIN_2)) {
+	} else if (GPIO_Pin == GPIO_PIN_2) {
 		if (!HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_2)) {
-			if ((currentMillis - previousMillis > DEBOUNCE_DELAY
-					&& adc_function != CHANGE_MUSIC)) {
+			if (currentMillis - previousMillis > DEBOUNCE_DELAY
+					&& adc_function != CHANGE_MUSIC) {
 				// Rising edge of button 2
 				adc_function = CHANGE_VOLUME;
 				HAL_ADC_Start_IT(&hadc1);
 				previousMillis = currentMillis;
 			}
 		} else {
+			// Falling edge of button 2
 			adc_function = NONE;
+			volume = adc_select;
+			char message[100] = "[INFO][Volume changed to ";
+			int *helper = number_to_array(adc_select);
+			sendInfo(message, helper, adc_select, digit_count(adc_select));
 			HAL_ADC_Stop_IT(&hadc1);
 			extract_int_to_carrier(currentMusic);
 		}
+
 	} else if ((GPIO_Pin == GPIO_PIN_3)) {
 
 		if ((currentMillis - previousMillis > DEBOUNCE_DELAY)) {
@@ -964,6 +1102,9 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 				previousMillis = currentMillis;
 			}
 		} else {
+			char message[100] = "[INFO][Music changed to ";
+			int helper = number_to_array(adc_select);
+			sendInfo(message, helper, adc_select, digit_count(adc_select));
 			adc_function = NONE;
 			HAL_ADC_Stop_IT(&hadc1);
 			set_music(adc_select);
